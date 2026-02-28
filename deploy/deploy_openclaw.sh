@@ -1,0 +1,101 @@
+#!/bin/bash
+# 依照 OpenClaw Docker 文档步骤：本地构造镜像，导出并通过 SSH 部署到远程服务器
+# 目标主机: rmbook
+
+# 设置脚本在遇到错误 (-e)、未定义变量 (-u) 或管道命令失败 (-o pipefail) 时立即退出
+set -euo pipefail
+
+# 获取脚本所在目录并切换到项目根目录，以确保相对路径执行正确
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}/.." || exit 1
+
+# 从 package.json 获取版本号
+VERSION=$(grep -m1 '"version":' package.json | awk -F'"' '{print $4}')
+if [ -z "$VERSION" ]; then
+  echo "无法从 package.json 获取版本号！"
+  exit 1
+fi
+
+IMAGE_NAME="krepus.com/openclaw:${VERSION}"
+REMOTE_HOST="rmbook"
+REMOTE_DIR="~/openclaw-deploy"
+
+echo "1. 检查是否存在镜像 ${IMAGE_NAME} ..."
+if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
+  echo "镜像 ${IMAGE_NAME} 已存在，跳过本地构建。"
+else
+  echo "镜像 ${IMAGE_NAME} 不存在，开始按照文档步骤本地构造 OpenClaw 镜像 (docker build) ..."
+  # 关闭 provenance 来源证明生成，彻底解决较老版本 podman 3.4 导入 tar 包后 tag 变成 localhost 的问题
+  docker build --provenance=false -t "${IMAGE_NAME}" -f Dockerfile .
+fi
+
+echo "2. 将镜像导入 ${REMOTE_HOST} (podman save & load) ..."
+if ssh "$REMOTE_HOST" "podman image inspect ${IMAGE_NAME} >/dev/null 2>&1"; then
+  echo "远程主机 ${REMOTE_HOST} 已存在镜像 ${IMAGE_NAME}，跳过导入步骤。"
+else
+  echo "远程主机缺少该镜像，将其导出并通过 ssh 的标准输入直接载入远程节点 ..."
+  docker save "${IMAGE_NAME}" | ssh "$REMOTE_HOST" "podman load"
+fi
+
+echo "3. 准备远程目录与 docker-compose 配置文件 ..."
+ssh "$REMOTE_HOST" "mkdir -p ${REMOTE_DIR}"
+scp docker-compose.yml "$REMOTE_HOST:${REMOTE_DIR}/"
+scp "${SCRIPT_DIR}/openclaw_conf.json" "$REMOTE_HOST:${REMOTE_DIR}/openclaw.json"
+
+echo "4. 在远程服务器初始化与启动服务 ..."
+# 检查是否已有 .env 并提取 Gateway Token
+EXISTING_TOKEN=$(ssh "$REMOTE_HOST" "if [ -f ${REMOTE_DIR}/.env ]; then grep '^OPENCLAW_GATEWAY_TOKEN=' ${REMOTE_DIR}/.env | cut -d'=' -f2 | tr -d '\\\"'; fi" || true)
+
+if [ -n "$EXISTING_TOKEN" ]; then
+  echo "发现已存在的 Gateway Token，将继续使用该 Token。"
+  GATEWAY_TOKEN="$EXISTING_TOKEN"
+else
+  echo "生成新的 Gateway Token ..."
+  GATEWAY_TOKEN=$(openssl rand -hex 32)
+fi
+
+ssh -t "$REMOTE_HOST" "
+  export PATH=\"~/.local/bin:\$PATH\"
+
+  cd ${REMOTE_DIR}
+  
+  export OPENCLAW_IMAGE=\"${IMAGE_NAME}\"
+  export OPENCLAW_GATEWAY_TOKEN=\"${GATEWAY_TOKEN}\"
+  export OPENCLAW_CONFIG_DIR=\"~/.openclaw\"
+  export OPENCLAW_WORKSPACE_DIR=\"~/.openclaw/workspace\"
+  
+  # 保存 .env 文件以保证 podman-compose up -d 可以持久化加载所需的环境变量
+  cat <<EOF > .env
+OPENCLAW_IMAGE=\"${IMAGE_NAME}\"
+OPENCLAW_GATEWAY_TOKEN=\"${GATEWAY_TOKEN}\"
+OPENCLAW_CONFIG_DIR=\"~/.openclaw\"
+OPENCLAW_WORKSPACE_DIR=\"~/.openclaw/workspace\"
+EOF
+  
+  # 创建绑定的目录从而防止可能产生的 root 权限写入问题
+  mkdir -p ~/.openclaw/workspace
+  
+  echo '=> 应用默认配置 ...'
+  cp ${REMOTE_DIR}/openclaw.json ~/.openclaw/openclaw.json
+  
+  # 设置目录权限，确保容器内非 root 用户拥有写权限
+  chmod -R 777 ~/.openclaw
+  
+  if podman ps | grep -q "openclaw-gateway"; then
+    echo '=> 容器已启动，正在重启 openclaw-gateway ...'
+    podman-compose restart openclaw-gateway
+  else
+    echo '=> 启动 openclaw-gateway ...'
+    podman-compose up -d openclaw-gateway
+  fi
+"
+
+echo ""
+echo "🎉 部署完成！"
+echo "----------------------------------------------------"
+echo "🖥️  远程主机: ${REMOTE_HOST}"
+echo "📁 部署目录: ${REMOTE_DIR}"
+echo "🔑 你的 Gateway Token: ${GATEWAY_TOKEN}"
+echo "----------------------------------------------------"
+echo "如需查看运行日志，可执行："
+echo "  ssh ${REMOTE_HOST} 'cd ${REMOTE_DIR} && podman-compose logs -f openclaw-gateway'"

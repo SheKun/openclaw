@@ -1,0 +1,42 @@
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "lan",
+    "port": 18789,
+    "auth": {
+      "mode": "token"
+    },
+    "controlUi": {
+      "enabled": true,
+      "allowedOrigins": [
+        "http://192.168.31.175:18789"
+      ]
+    }
+  },
+  "logging": {
+    "level": "info",
+    "redactSensitive": "tools"
+  },
+  "agents": {
+    "defaults": {
+      "maxConcurrent": 1,
+      "subagents": {
+        "maxConcurrent": 2
+      },
+      "workspace": "~/.openclaw/workspace",
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "1h"
+      },
+      "compaction": {
+        "mode": "safeguard"
+      }
+    }
+  },
+  "session": {
+    "mainKey": "main"
+  },
+  "diagnostics": {
+    "enabled": true
+  }
+}
