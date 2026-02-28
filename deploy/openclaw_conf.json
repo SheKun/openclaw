@@ -9,8 +9,12 @@
     "controlUi": {
       "enabled": true,
       "allowedOrigins": [
-        "http://192.168.31.175:18789"
+        "https://my-openclaw.local:18789"
       ]
+    },
+    "tls": {
+      "enabled": true,
+      "autoGenerate": true
     }
   },
   "logging": {
