@@ -9,6 +9,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}/.." || exit 1
 
+# 检查本地 .env 文件是否存在，如果存在则加载环境变量
+ENV_FILE="${SCRIPT_DIR}/.env"
+if [ -f "$ENV_FILE" ]; then
+  # 忽略注释和空行加载环境变量
+  echo "加载本地 .env 文件从: ${ENV_FILE}"
+  export $(grep -v '^#' "$ENV_FILE" | grep -v '^$' | xargs)
+else
+  echo "警告: 未找到本地 .env 文件 (${ENV_FILE})."
+fi
+
 # 从 package.json 获取版本号
 VERSION=$(grep -m1 '"version":' package.json | awk -F'"' '{print $4}')
 if [ -z "$VERSION" ]; then
@@ -59,17 +69,15 @@ ssh -t "$REMOTE_HOST" "
 
   cd ${REMOTE_DIR}
   
-  export OPENCLAW_IMAGE=\"${IMAGE_NAME}\"
-  export OPENCLAW_GATEWAY_TOKEN=\"${GATEWAY_TOKEN}\"
-  export OPENCLAW_CONFIG_DIR=\"~/.openclaw\"
-  export OPENCLAW_WORKSPACE_DIR=\"~/.openclaw/workspace\"
-  
   # 保存 .env 文件以保证 podman-compose up -d 可以持久化加载所需的环境变量
   cat <<EOF > .env
-OPENCLAW_IMAGE=\"${IMAGE_NAME}\"
-OPENCLAW_GATEWAY_TOKEN=\"${GATEWAY_TOKEN}\"
-OPENCLAW_CONFIG_DIR=\"~/.openclaw\"
-OPENCLAW_WORKSPACE_DIR=\"~/.openclaw/workspace\"
+OPENCLAW_IMAGE=${IMAGE_NAME}
+OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
+OPENCLAW_CONFIG_DIR=~/.openclaw
+OPENCLAW_WORKSPACE_DIR=~/.openclaw/workspace
+FEISHU_APP_ID=${FEISHU_APP_ID:-}
+FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+FEISHU_VERIFICATION_TOKEN=${FEISHU_VERIFICATION_TOKEN:-}
 EOF
   
   # 创建绑定的目录从而防止可能产生的 root 权限写入问题
@@ -81,13 +89,10 @@ EOF
   # 设置目录权限，确保容器内非 root 用户拥有写权限
   chmod -R 777 ~/.openclaw
   
-  if podman ps | grep -q "openclaw-gateway"; then
-    echo '=> 容器已启动，正在重启 openclaw-gateway ...'
-    podman-compose restart openclaw-gateway
-  else
-    echo '=> 启动 openclaw-gateway ...'
-    podman-compose up -d openclaw-gateway
-  fi
+  echo '=> 重新启动/更新 openclaw-gateway 容器 ...'
+  # 注意：不能只用 restart，restart 不会载入新的 .env 环境变量
+  # 使用 up -d 会在配置改变时自动重建容器，让新环境变量生效
+  podman-compose up -d openclaw-gateway
 "
 
 echo ""

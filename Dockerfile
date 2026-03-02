@@ -56,6 +56,12 @@ USER root
 RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
  && chmod 755 /app/openclaw.mjs
 
+USER node
+ARG OPENCLAW_PLUGINS="@openclaw/feishu"
+RUN if [ -n "$OPENCLAW_PLUGINS" ]; then \
+      node openclaw.mjs plugins install $OPENCLAW_PLUGINS; \
+    fi
+
 ENV NODE_ENV=production
 
 # Security hardening: Run as non-root user
