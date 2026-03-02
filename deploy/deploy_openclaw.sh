@@ -57,10 +57,10 @@ echo "4. 在远程服务器初始化与启动服务 ..."
 EXISTING_TOKEN=$(ssh "$REMOTE_HOST" "if [ -f ${REMOTE_DIR}/.env ]; then grep '^OPENCLAW_GATEWAY_TOKEN=' ${REMOTE_DIR}/.env | cut -d'=' -f2 | tr -d '\\\"'; fi" || true)
 
 if [ -n "$EXISTING_TOKEN" ]; then
-  echo "发现已存在的 Gateway Token，将继续使用该 Token。"
+  echo "=> 发现已存在的 Gateway Token，将继续使用该 Token。"
   GATEWAY_TOKEN="$EXISTING_TOKEN"
 else
-  echo "生成新的 Gateway Token ..."
+  echo "=> 生成新的 Gateway Token ..."
   GATEWAY_TOKEN=$(openssl rand -hex 32)
 fi
 
@@ -77,17 +77,19 @@ OPENCLAW_CONFIG_DIR=~/.openclaw
 OPENCLAW_WORKSPACE_DIR=~/.openclaw/workspace
 FEISHU_APP_ID=${FEISHU_APP_ID:-}
 FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
-FEISHU_VERIFICATION_TOKEN=${FEISHU_VERIFICATION_TOKEN:-}
+BAILIAN_API_KEY=${BAILIAN_API_KEY:-}
 EOF
   
-  # 创建绑定的目录从而防止可能产生的 root 权限写入问题
-  mkdir -p ~/.openclaw/workspace
-  
-  echo '=> 应用默认配置 ...'
+  if [ ! -d ~/.openclaw ]; then
+    # 创建绑定的目录从而防止可能产生的 root 权限写入问题
+    mkdir -p ~/.openclaw/workspace
+    
+  else
+    echo '=> 目录 ~/.openclaw 已存在，跳过创建和权限修改 ...'
+  fi
+
+  echo '=> 更新服务配置 ...'
   cp ${REMOTE_DIR}/openclaw.json ~/.openclaw/openclaw.json
-  
-  # 设置目录权限，确保容器内非 root 用户拥有写权限
-  chmod -R 777 ~/.openclaw
   
   echo '=> 重新启动/更新 openclaw-gateway 容器 ...'
   # 注意：不能只用 restart，restart 不会载入新的 .env 环境变量
@@ -108,9 +110,9 @@ echo "▶ 1. 访问控制面板 (Control UI)"
 echo "因为我们启用了更安全的 HTTPS 和设备认证，请按照以下步骤在你的电脑上进行配置："
 echo "   a. 修改你的本地 hosts 文件 (Windows: C:\\Windows\\System32\\drivers\\etc\\hosts, Mac/Linux: /etc/hosts)"
 echo "   b. 在末尾添加一行:"
-echo "      ${REMOTE_HOST} my-openclaw.local"
+echo "      <你的服务器IP> openclaw.local"
 echo "   c. 在浏览器中打开以下带 Token 认证的专属链接 (用于首次设备配对):"
-echo "      https://my-openclaw.local:18789/?token=${GATEWAY_TOKEN}"
+echo "      https://openclaw.local:18789/?token=${GATEWAY_TOKEN}"
 echo "   d. 浏览器可能会提示“证书不受信任”(因为是自签名证书)，"
 echo "      - Chrome/Edge: 盲打输入 thisisunsafe 即可绕过"
 echo "      - 其他浏览器: 点击“高级” -> “继续前往”"

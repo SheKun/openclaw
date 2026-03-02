@@ -2,6 +2,7 @@ services:
   openclaw-gateway:
     container_name: openclaw-gateway
     image: ${OPENCLAW_IMAGE:-openclaw:local}
+    user: "root"
     env_file:
       - .env
     environment:
@@ -29,6 +30,7 @@ services:
   openclaw-cli:
     container_name: openclaw-cli
     image: ${OPENCLAW_IMAGE:-openclaw:local}
+    user: "root"
     env_file:
       - .env
     environment:

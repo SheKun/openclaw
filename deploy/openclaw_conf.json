@@ -23,6 +23,9 @@
   },
   "agents": {
     "defaults": {
+      "model": {
+        "primary": "bailian/qwen3.5-plus"
+      },
       "maxConcurrent": 1,
       "subagents": {
         "maxConcurrent": 2
@@ -54,6 +57,41 @@
       "allowFrom": ["ou_16d3bb304424a58d95a9bff5fd71cbe1"],
       "groupPolicy": "allowlist",
       "groupAllowFrom": ["oc_bb3e21ce2de29f2c97e370a20c45f492"]
+    }
+  },
+  "models": {
+    "providers": {
+      "bailian": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "apiKey": "${BAILIAN_API_KEY}",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "qwen3-max",
+            "name": "Qwen3 Max",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "contextWindow": 262144,
+            "maxTokens": 32768
+          },
+          {
+            "id": "qwen3.5-plus",
+            "name": "Qwen3.5 Plus",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "qwen3-coder-plus",
+            "name": "Qwen3 Coder Plus",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          }
+        ]
+      }
     }
   }
 }
