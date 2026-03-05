@@ -36,6 +36,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright \
       node /app/node_modules/playwright-core/cli.js install --with-deps chromium && \
       chown -R node:node /home/node/.cache/ms-playwright; \
+      CHROMIUM_BIN=$(find /home/node/.cache/ms-playwright -name "chrome" -type f -executable | head -n 1) && \
+      echo "CHROMIUM_EXECUTABLE_PATH=$CHROMIUM_BIN" >> /app/.env && \
+      chown node:node /app/.env; \
     fi
 
 

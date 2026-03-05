@@ -25,7 +25,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build20260305"
+VERSION="${OPENCLAW_VERSION}-build202603051600"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 REMOTE_HOST="rmbook"
 REMOTE_DIR="~/openclaw-deploy"

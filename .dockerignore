@@ -46,6 +46,7 @@ Swabble/
 Core/
 Users/
 vendor/
+deploy/
 
 # Needed for building the Canvas A2UI bundle during Docker image builds.
 # Keep the rest of apps/ and vendor/ excluded to avoid a large build context.
