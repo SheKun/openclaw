@@ -19,13 +19,13 @@ else
   echo "警告: 未找到本地 .env 文件 (${ENV_FILE})."
 fi
 
-# 从 package.json 获取版本号
-VERSION=$(grep -m1 '"version":' package.json | awk -F'"' '{print $4}')
-if [ -z "$VERSION" ]; then
+# 从 package.json 获取openclaw版本号
+OPENCLAW_VERSION=$(grep -m1 '"version":' package.json | awk -F'"' '{print $4}')
+if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-
+VERSION="${OPENCLAW_VERSION}-build20260305"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 REMOTE_HOST="rmbook"
 REMOTE_DIR="~/openclaw-deploy"
@@ -36,7 +36,11 @@ if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
 else
   echo "镜像 ${IMAGE_NAME} 不存在，开始按照文档步骤本地构造 OpenClaw 镜像 (docker build) ..."
   # 关闭 provenance 来源证明生成，彻底解决较老版本 podman 3.4 导入 tar 包后 tag 变成 localhost 的问题
-  docker build --provenance=false -t "${IMAGE_NAME}" -f Dockerfile .
+  docker build --provenance=false \
+    --build-arg "OPENCLAW_INSTALL_BROWSER=1" \
+    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest" \
+    --build-arg "OPENCLAW_PLUGINS=@openclaw/feishu" \
+    -t "${IMAGE_NAME}" -f Dockerfile .
 fi
 
 echo "2. 将镜像导入 ${REMOTE_HOST} (podman save & load) ..."
@@ -80,20 +84,15 @@ FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
 BAILIAN_API_KEY=${BAILIAN_API_KEY:-}
 EOF
   
-  if [ ! -d ~/.openclaw ]; then
-    # 创建绑定的目录从而防止可能产生的 root 权限写入问题
+  if [ ! -d ~/.openclaw/workspace ]; then
+    echo '=> 创建工作目录并初始化 OpenClaw 配置 ...'
     mkdir -p ~/.openclaw/workspace
-    
+    cp ${REMOTE_DIR}/openclaw.json ~/.openclaw/openclaw.json      
   else
-    echo '=> 目录 ~/.openclaw 已存在，跳过创建和权限修改 ...'
+    echo '=> 工作目录 ~/.openclaw/workspace 已存在，跳过创建 ...'
   fi
-
-  echo '=> 更新服务配置 ...'
-  cp ${REMOTE_DIR}/openclaw.json ~/.openclaw/openclaw.json
   
-  echo '=> 重新启动/更新 openclaw-gateway 容器 ...'
-  # 注意：不能只用 restart，restart 不会载入新的 .env 环境变量
-  # 使用 up -d 会在配置改变时自动重建容器，让新环境变量生效
+  echo '=> 重新启动 openclaw-gateway 容器 ...'
   podman-compose up -d openclaw-gateway
 "
 

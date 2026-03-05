@@ -54,9 +54,7 @@
       "connectionMode": "websocket",
       "domain": "feishu",
       "dmPolicy": "allowlist",
-      "allowFrom": ["ou_16d3bb304424a58d95a9bff5fd71cbe1"],
-      "groupPolicy": "allowlist",
-      "groupAllowFrom": ["oc_bb3e21ce2de29f2c97e370a20c45f492"]
+      "groupPolicy": "allowlist"
     }
   },
   "models": {

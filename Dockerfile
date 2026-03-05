@@ -9,14 +9,6 @@ RUN corepack enable
 WORKDIR /app
 RUN chown node:node /app
 
-ARG OPENCLAW_DOCKER_APT_PACKAGES=""
-RUN if [ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]; then \
-      apt-get update && \
-      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $OPENCLAW_DOCKER_APT_PACKAGES && \
-      apt-get clean && \
-      rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*; \
-    fi
-
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY --chown=node:node ui/package.json ./ui/package.json
 COPY --chown=node:node patches ./patches
@@ -25,7 +17,9 @@ COPY --chown=node:node scripts ./scripts
 USER node
 # Reduce OOM risk on low-memory hosts during dependency installation.
 # Docker builds on small VMs may otherwise fail with "Killed" (exit 137).
-RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/home/node/.local/share/pnpm/store,uid=1000,gid=1000 \
+    pnpm config set store-dir /home/node/.local/share/pnpm/store \
+    && NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
 
 # Optionally install Chromium and Xvfb for browser automation.
 # Build with: docker build --build-arg OPENCLAW_INSTALL_BROWSER=1 ...
@@ -33,16 +27,17 @@ RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
 # Must run after pnpm install so playwright-core is available in node_modules.
 USER root
 ARG OPENCLAW_INSTALL_BROWSER=""
-RUN if [ -n "$OPENCLAW_INSTALL_BROWSER" ]; then \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ -n "$OPENCLAW_INSTALL_BROWSER" ]; then \
       apt-get update && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb && \
       mkdir -p /home/node/.cache/ms-playwright && \
       PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright \
       node /app/node_modules/playwright-core/cli.js install --with-deps chromium && \
-      chown -R node:node /home/node/.cache/ms-playwright && \
-      apt-get clean && \
-      rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*; \
+      chown -R node:node /home/node/.cache/ms-playwright; \
     fi
+
 
 USER node
 COPY --chown=node:node . .
@@ -56,13 +51,28 @@ USER root
 RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
  && chmod 755 /app/openclaw.mjs
 
+# pre-install the tools may be needed by the agent
 USER node
-ARG OPENCLAW_PLUGINS="@openclaw/feishu"
+ARG OPENCLAW_PLUGINS=""
 RUN if [ -n "$OPENCLAW_PLUGINS" ]; then \
       node openclaw.mjs plugins install $OPENCLAW_PLUGINS; \
     fi
 
-ENV NODE_ENV=production
+USER root
+ARG OPENCLAW_DOCKER_JS_PACKAGES=""
+RUN --mount=type=cache,target=/root/.npm \
+    if [ -n "$OPENCLAW_DOCKER_JS_PACKAGES" ]; then \
+      npm install -g $OPENCLAW_DOCKER_JS_PACKAGES; \
+    fi
+
+USER root
+ARG OPENCLAW_DOCKER_APT_PACKAGES=""
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    if [ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]; then \
+      apt-get update && \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $OPENCLAW_DOCKER_APT_PACKAGES; \
+    fi
 
 # Security hardening: Run as non-root user
 # The node:22-bookworm image includes a 'node' user (uid 1000)
