@@ -17,6 +17,16 @@
       "autoGenerate": true
     }
   },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "text": true,
+    "bash": true,
+    "config": true,
+    "debug": true,
+    "restart": true,
+    "allowFrom": {}
+  },
   "browser": {
     "enabled": true,
     "evaluateEnabled": true,
@@ -40,7 +50,9 @@
       },
       "maxConcurrent": 1,
       "subagents": {
-        "maxConcurrent": 2
+        "maxConcurrent": 8,
+        "maxChildrenPerAgent": 4,
+        "maxSpawnDepth": 1
       },
       "workspace": "~/.openclaw/workspace",
       "contextPruning": {
@@ -50,6 +62,63 @@
       "compaction": {
         "mode": "safeguard"
       }
+    },
+    "list": [
+      {
+        "id": "steward",
+        "default": true,
+        "name": "Joi",
+        "model": {
+          "primary": "bailian/qwen3.5-plus"
+        },
+        "subagents": {
+          "allowAgents": ["*"]
+        },
+        "tools": {
+          "deny": ["browser"]
+        }
+      },
+      {
+        "id": "coder",
+        "name": "Ape",
+        "workspace": "~/.openclaw/workspace-coder",
+        "model": {
+          "primary": "bailian/qwen3-coder-plus"
+        },
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": ["browser"]
+        }
+      },
+      {
+        "id": "crawler",
+        "name": "Spider",
+        "workspace": "~/.openclaw/workspace-crawler",
+        "model": {
+          "primary": "bailian/qwen3.5-plus"
+        },
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "allow": ["browser"]
+        }
+      }
+    ]
+  },
+  "bindings": [
+    {"agentId": "steward", "match": {"channel": "feishu", "accountId": "steward"}},
+    {"agentId": "coder", "match": {"channel": "feishu", "accountId": "coder"}},
+    {"agentId": "crawler", "match": {"channel": "feishu", "accountId": "crawler"}}
+  ],
+  "messages": {
+    "queue": {
+      "mode": "steer",
+      "debounceMs": 500,
+      "cap": 10
     }
   },
   "session": {
@@ -59,14 +128,31 @@
     "enabled": true
   },
   "channels": {
-    "feishu": {
-      "enabled": true,
-      "appId": "${FEISHU_APP_ID}",
-      "appSecret": "${FEISHU_APP_SECRET}",
-      "connectionMode": "websocket",
-      "domain": "feishu",
+    "defaults": {
       "dmPolicy": "allowlist",
       "groupPolicy": "allowlist"
+    },
+    "feishu": {
+      "enabled": true,
+      "connectionMode": "websocket",
+      "domain": "feishu",
+      "accounts": [
+        {
+          "accountId": "steward",
+          "appId": "${FEISHU_APP_ID}",
+          "appSecret": "${FEISHU_APP_SECRET}"
+        },
+        {
+          "accountId": "coder",
+          "appId": "${FEISHU_APP_ID_CODER}",
+          "appSecret": "${FEISHU_APP_SECRET_CODER}"
+        },
+        {
+          "accountId": "crawler",
+          "appId": "${FEISHU_APP_ID_CRAWLER}",
+          "appSecret": "${FEISHU_APP_SECRET_CRAWLER}"
+        }
+      ]
     }
   },
   "models": {

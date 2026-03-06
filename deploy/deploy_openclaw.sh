@@ -81,6 +81,10 @@ OPENCLAW_CONFIG_DIR=~/.openclaw
 OPENCLAW_WORKSPACE_DIR=~/.openclaw/workspace
 FEISHU_APP_ID=${FEISHU_APP_ID:-}
 FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+FEISHU_APP_ID_CODER=${FEISHU_APP_ID_CODER:-}
+FEISHU_APP_SECRET_CODER=${FEISHU_APP_SECRET_CODER:-}
+FEISHU_APP_ID_CRAWLER=${FEISHU_APP_ID_CRAWLER:-}
+FEISHU_APP_SECRET_CRAWLER=${FEISHU_APP_SECRET_CRAWLER:-}
 BAILIAN_API_KEY=${BAILIAN_API_KEY:-}
 EOF
   
@@ -93,6 +97,7 @@ EOF
   fi
   
   echo '=> 重新启动 openclaw-gateway 容器 ...'
+  podman-compose down openclaw-gateway > /dev/null 2>&1
   podman-compose up -d openclaw-gateway
 "
 
