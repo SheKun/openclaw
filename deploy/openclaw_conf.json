@@ -8,9 +8,7 @@
     },
     "controlUi": {
       "enabled": true,
-      "allowedOrigins": [
-        "https://openclaw.local:18789"
-      ]
+      "allowedOrigins": ["https://openclaw.local:18789"]
     },
     "tls": {
       "enabled": true,
@@ -38,10 +36,6 @@
       "allowPrivateNetwork": false,
       "dangerouslyAllowPrivateNetwork": false
     }
-  },
-  "logging": {
-    "level": "info",
-    "redactSensitive": "tools"
   },
   "agents": {
     "defaults": {
@@ -110,9 +104,9 @@
     ]
   },
   "bindings": [
-    {"agentId": "steward", "match": {"channel": "feishu", "accountId": "steward"}},
-    {"agentId": "coder", "match": {"channel": "feishu", "accountId": "coder"}},
-    {"agentId": "crawler", "match": {"channel": "feishu", "accountId": "crawler"}}
+    { "agentId": "steward", "match": { "channel": "feishu", "accountId": "steward" } },
+    { "agentId": "coder", "match": { "channel": "feishu", "accountId": "coder" } },
+    { "agentId": "crawler", "match": { "channel": "feishu", "accountId": "crawler" } }
   ],
   "messages": {
     "queue": {
@@ -120,12 +114,6 @@
       "debounceMs": 500,
       "cap": 10
     }
-  },
-  "session": {
-    "mainKey": "main"
-  },
-  "diagnostics": {
-    "enabled": true
   },
   "channels": {
     "defaults": {
@@ -136,23 +124,23 @@
       "enabled": true,
       "connectionMode": "websocket",
       "domain": "feishu",
-      "accounts": [
-        {
+      "accounts": {
+        "steward": {
           "accountId": "steward",
           "appId": "${FEISHU_APP_ID}",
           "appSecret": "${FEISHU_APP_SECRET}"
         },
-        {
+        "coder": {
           "accountId": "coder",
           "appId": "${FEISHU_APP_ID_CODER}",
           "appSecret": "${FEISHU_APP_SECRET_CODER}"
         },
-        {
+        "crawler": {
           "accountId": "crawler",
           "appId": "${FEISHU_APP_ID_CRAWLER}",
           "appSecret": "${FEISHU_APP_SECRET_CRAWLER}"
         }
-      ]
+      }
     }
   },
   "models": {
