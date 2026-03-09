@@ -61,7 +61,7 @@
       {
         "id": "steward",
         "default": true,
-        "name": "Joi",
+        "name": "Adam",
         "model": {
           "primary": "bailian/qwen3.5-plus"
         },
