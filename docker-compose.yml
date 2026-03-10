@@ -10,7 +10,6 @@ services:
       TERM: xterm-256color
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
-      - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
       - ~/.ssh:/root/.ssh
       - ~/.ssh:/home/node/.ssh
       - ~/.gitconfig:/root/.gitconfig
@@ -43,7 +42,6 @@ services:
       BROWSER: echo
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
-      - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
     stdin_open: true
     tty: true
     init: true

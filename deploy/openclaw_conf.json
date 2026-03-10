@@ -116,14 +116,14 @@
     }
   },
   "channels": {
-    "defaults": {
-      "dmPolicy": "allowlist",
-      "groupPolicy": "allowlist"
-    },
     "feishu": {
       "enabled": true,
       "connectionMode": "websocket",
       "domain": "feishu",
+      "dmPolicy": "allowlist",
+      "allowFrom": [],
+      "groupPolicy": "allowlist",
+      "groupAllowFrom": [],
       "accounts": {
         "steward": {
           "accountId": "steward",
