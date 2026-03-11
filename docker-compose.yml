@@ -14,35 +14,13 @@ services:
       - ~/.ssh:/home/node/.ssh
       - ~/.gitconfig:/root/.gitconfig
       - ~/.gitconfig:/home/node/.gitconfig
+      - ./secret_file.json:/tmp/secret_file.json:ro
+      - ./start-gateway.sh:/usr/local/bin/start-gateway.sh:ro
     ports:
       - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
       - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
+    cap_add:
+      - SYS_ADMIN
     init: true
     restart: unless-stopped
-    command:
-      [
-        "node",
-        "dist/index.js",
-        "gateway",
-        "--bind",
-        "${OPENCLAW_GATEWAY_BIND:-lan}",
-        "--port",
-        "18789",
-      ]
-
-  openclaw-cli:
-    container_name: openclaw-cli
-    image: ${OPENCLAW_IMAGE:-openclaw:local}
-    user: "root"
-    env_file:
-      - .env
-    environment:
-      HOME: /home/node
-      TERM: xterm-256color
-      BROWSER: echo
-    volumes:
-      - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
-    stdin_open: true
-    tty: true
-    init: true
-    entrypoint: ["node", "dist/index.js"]
+    command: ["sh", "/usr/local/bin/start-gateway.sh"]

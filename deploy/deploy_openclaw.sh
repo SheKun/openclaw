@@ -10,11 +10,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}/.." || exit 1
 
 # 检查本地 .env 文件是否存在，如果存在则加载环境变量
-ENV_FILE="${SCRIPT_DIR}/.env"
+ENV_FILE="${SCRIPT_DIR}/../../.env"
 if [ -f "$ENV_FILE" ]; then
   # 忽略注释和空行加载环境变量
   echo "加载本地 .env 文件从: ${ENV_FILE}"
-  export $(grep -v '^#' "$ENV_FILE" | grep -v '^$' | xargs)
+  set -a; source <(sed 's/\r//' "$ENV_FILE"); set +a
+  set -a; source <(sed 's/\r//' "${SCRIPT_DIR}/.env"); set +a
 else
   echo "警告: 未找到本地 .env 文件 (${ENV_FILE})."
 fi
@@ -27,8 +28,9 @@ if [ -z "$OPENCLAW_VERSION" ]; then
 fi
 VERSION="${OPENCLAW_VERSION}-build202603051600"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
+
 REMOTE_HOST="rmbook"
-REMOTE_DIR="~/openclaw-deploy"
+DEPLOY_DIR="~/openclaw-deploy"
 
 echo "1. 检查是否存在镜像 ${IMAGE_NAME} ..."
 if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
@@ -51,14 +53,68 @@ else
   docker save "${IMAGE_NAME}" | ssh "$REMOTE_HOST" "podman load"
 fi
 
-echo "3. 准备远程目录与 docker-compose 配置文件 ..."
-ssh "$REMOTE_HOST" "mkdir -p ${REMOTE_DIR}"
-scp docker-compose.yml "$REMOTE_HOST:${REMOTE_DIR}/"
-scp "${SCRIPT_DIR}/openclaw_conf.json" "$REMOTE_HOST:${REMOTE_DIR}/openclaw.json"
+echo "3. 准备部署文件 ..."
+ssh "$REMOTE_HOST" "mkdir -p ${DEPLOY_DIR}"
+
+# 从 KeePass 密码库中读取密钥，生成 secret_file.json
+echo "从 KeePass 密码库中加载密钥..."
+KEEPASS_FILE="${SCRIPT_DIR}/../../keepass.kdbx"
+if [ ! -f "$KEEPASS_FILE" ]; then
+  echo "错误: 未找到 KeePass 密码库文件 (${KEEPASS_FILE})"
+  exit 1
+fi
+
+FEISHU_APP_STEWARD_SLOT_PATH="飞书/家庭/FEISHU_APP_STEWARD"
+FEISHU_APP_CRAWLER_SLOT_PATH="飞书/家庭/FEISHU_APP_CRAWLER"
+FEISHU_APP_CODER_SLOT_PATH="飞书/家庭/FEISHU_APP_CODER"
+BAILIAN_API_KEY_SLOT_PATH="LLM/阿里百炼/2141603"
+
+# 辅助函数: 从 KeePass 条目读取 UserName 属性（对应 AppID）
+kp_username() {
+  echo "${KEEPASS_PASSWORD}" | keepassxc-cli show -q -a UserName "$KEEPASS_FILE" "$1" 2>&1
+}
+
+# 辅助函数: 从 KeePass 条目读取 Password 属性（对应 AppSecret / API Key）
+kp_password() {
+  echo "${KEEPASS_PASSWORD}" | keepassxc-cli show -q -a Password "$KEEPASS_FILE" "$1" 2>&1
+}
+
+FEISHU_APP_ID_VAL=$(kp_username "${FEISHU_APP_STEWARD_SLOT_PATH}")
+FEISHU_APP_SECRET_VAL=$(kp_password "${FEISHU_APP_STEWARD_SLOT_PATH}")
+FEISHU_APP_ID_CODER_VAL=$(kp_username "${FEISHU_APP_CODER_SLOT_PATH}")
+FEISHU_APP_SECRET_CODER_VAL=$(kp_password "${FEISHU_APP_CODER_SLOT_PATH}")
+FEISHU_APP_ID_CRAWLER_VAL=$(kp_username "${FEISHU_APP_CRAWLER_SLOT_PATH}")
+FEISHU_APP_SECRET_CRAWLER_VAL=$(kp_password "${FEISHU_APP_CRAWLER_SLOT_PATH}")
+BAILIAN_API_KEY_VAL=$(kp_password "${BAILIAN_API_KEY_SLOT_PATH}")
+
+# 用 jq 安全拼接 JSON，避免特殊字符问题
+jq -n \
+  --arg feishu_app_id              "$FEISHU_APP_ID_VAL" \
+  --arg feishu_app_secret          "$FEISHU_APP_SECRET_VAL" \
+  --arg feishu_app_id_coder        "$FEISHU_APP_ID_CODER_VAL" \
+  --arg feishu_app_secret_coder    "$FEISHU_APP_SECRET_CODER_VAL" \
+  --arg feishu_app_id_crawler      "$FEISHU_APP_ID_CRAWLER_VAL" \
+  --arg feishu_app_secret_crawler  "$FEISHU_APP_SECRET_CRAWLER_VAL" \
+  --arg bailian_api_key            "$BAILIAN_API_KEY_VAL" \
+  '{
+    FEISHU_APP_ID:              $feishu_app_id,
+    FEISHU_APP_SECRET:          $feishu_app_secret,
+    FEISHU_APP_ID_CODER:        $feishu_app_id_coder,
+    FEISHU_APP_SECRET_CODER:    $feishu_app_secret_coder,
+    FEISHU_APP_ID_CRAWLER:      $feishu_app_id_crawler,
+    FEISHU_APP_SECRET_CRAWLER:  $feishu_app_secret_crawler,
+    BAILIAN_API_KEY:            $bailian_api_key
+  }' > "${SCRIPT_DIR}/secret_file.json"
+echo "secret_file.json 生成完成"
+
+scp docker-compose.yml "$REMOTE_HOST:${DEPLOY_DIR}/"
+scp "${SCRIPT_DIR}/openclaw_conf.json" "$REMOTE_HOST:${DEPLOY_DIR}/openclaw.json"
+scp "${SCRIPT_DIR}/secret_file.json" "$REMOTE_HOST:${DEPLOY_DIR}/secret_file.json"
+scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
 
 echo "4. 在远程服务器初始化与启动服务 ..."
 # 检查是否已有 .env 并提取 Gateway Token
-EXISTING_TOKEN=$(ssh "$REMOTE_HOST" "if [ -f ${REMOTE_DIR}/.env ]; then grep '^OPENCLAW_GATEWAY_TOKEN=' ${REMOTE_DIR}/.env | cut -d'=' -f2 | tr -d '\\\"'; fi" || true)
+EXISTING_TOKEN=$(ssh "$REMOTE_HOST" "if [ -f ${DEPLOY_DIR}/.env ]; then grep '^OPENCLAW_GATEWAY_TOKEN=' ${DEPLOY_DIR}/.env | cut -d'=' -f2 | tr -d '\\\"'; fi" || true)
 
 if [ -n "$EXISTING_TOKEN" ]; then
   echo "=> 发现已存在的 Gateway Token，将继续使用该 Token。"
@@ -71,29 +127,30 @@ fi
 ssh -t "$REMOTE_HOST" "
   export PATH=\"~/.local/bin:\$PATH\"
 
-  cd ${REMOTE_DIR}
+  cd ${DEPLOY_DIR}
   
   # 保存 .env 文件以保证 podman-compose up -d 可以持久化加载所需的环境变量
   cat <<EOF > .env
 OPENCLAW_IMAGE=${IMAGE_NAME}
 OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
 OPENCLAW_CONFIG_DIR=~/.openclaw
-FEISHU_APP_ID=${FEISHU_APP_ID:-}
-FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+FEISHU_APP_ID_STEWARD=${FEISHU_APP_ID_STEWARD:-}
+FEISHU_APP_SECRET_STEWARD=${FEISHU_APP_SECRET_STEWARD:-}
 FEISHU_APP_ID_CODER=${FEISHU_APP_ID_CODER:-}
 FEISHU_APP_SECRET_CODER=${FEISHU_APP_SECRET_CODER:-}
 FEISHU_APP_ID_CRAWLER=${FEISHU_APP_ID_CRAWLER:-}
 FEISHU_APP_SECRET_CRAWLER=${FEISHU_APP_SECRET_CRAWLER:-}
-BAILIAN_API_KEY=${BAILIAN_API_KEY:-}
 EOF
   
-  if [ ! -d ~/.openclaw/workspace ]; then
-    echo '=> 创建工作目录并初始化 OpenClaw 配置 ...'
-    mkdir -p ~/.openclaw/workspace
-    cp ${REMOTE_DIR}/openclaw.json ~/.openclaw/openclaw.json      
+  if [ ! -d ~/.openclaw ]; then
+    echo '=> 创建配置目录并初始化 OpenClaw 配置 ...'
+    mkdir -p ~/.openclaw
+    cp ${DEPLOY_DIR}/openclaw.json ~/.openclaw/openclaw.json      
   else
-    echo '=> 工作目录 ~/.openclaw/workspace 已存在，跳过创建 ...'
+    echo '=> 配置目录 ~/.openclaw 已存在，跳过创建 ...'
   fi
+
+  chmod 600 ./secret_file.json
   
   echo '=> 重新启动 openclaw-gateway 容器 ...'
   podman-compose down openclaw-gateway > /dev/null 2>&1
@@ -104,7 +161,7 @@ echo ""
 echo "🎉 部署完成！"
 echo "----------------------------------------------------"
 echo "🖥️  远程主机: ${REMOTE_HOST}"
-echo "📁 部署目录: ${REMOTE_DIR}"
+echo "📁 部署目录: ${DEPLOY_DIR}"
 echo "🔑 你的 Gateway Token: ${GATEWAY_TOKEN}"
 echo "----------------------------------------------------"
 echo "📝 【使用说明与帮助】"

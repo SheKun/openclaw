@@ -115,6 +115,14 @@
       "cap": 10
     }
   },
+  "secrets": {
+    "providers": {
+      "file": {
+        "source": "file",
+        "path": "/tmp/secret_file.json"
+      }
+    }
+  },
   "channels": {
     "feishu": {
       "enabled": true,
@@ -127,8 +135,8 @@
       "accounts": {
         "steward": {
           "accountId": "steward",
-          "appId": "${FEISHU_APP_ID}",
-          "appSecret": "${FEISHU_APP_SECRET}"
+          "appId": "${FEISHU_APP_ID_STEWARD}",
+          "appSecret": "${FEISHU_APP_SECRET_STEWARD}"
         },
         "coder": {
           "accountId": "coder",
@@ -147,7 +155,11 @@
     "providers": {
       "bailian": {
         "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "apiKey": "${BAILIAN_API_KEY}",
+        "apiKey": {
+          "provider": "file",
+          "source": "file",
+          "id": "/BAILIAN_API_KEY"
+        },
         "api": "openai-completions",
         "models": [
           {
