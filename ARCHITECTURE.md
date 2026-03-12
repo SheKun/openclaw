@@ -4,6 +4,7 @@
 
 - 网关 (Gateway) 以 Docker 容器（`openclaw-gateway`）形式运行。通过 `docker-compose.yml` 可以指定其网络、端口及存储挂载。
 - 配置体系结构：通过宿主机目录映射 `openclaw_conf.json` 至容器内的对应路径提供各种设定（网关模式、agents 声明、通讯通道 channels，及模型服务 providers 等）。
+  - **动态热加载 (Hot Reload)：** 网关会通过 `chokidar` 监听该配置文件的变化。当修改 `openclaw_conf.json` 时（如 `channels` 配置变化），网关会生成重载计划 (Reload Plan)，支持针对特定通道的动态热重启，而无需重启整个网关服务。
 - 绝密配置挂载：通过 `secret_file.json` 提供静态凭据，安全措施之一是在 `start-gateway.sh` 将 Gateway 进程挂起在后台后，立即对 `/tmp/secret_file.json` 执行 `umount`，降低敏感信息的持久暴露。
 
 ## 2. 通道集成 (Channels Integration)

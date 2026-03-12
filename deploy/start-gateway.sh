@@ -6,8 +6,16 @@
 
 set -e
 
+
+# 加载 .env 中的环境变量（如果存在）
+[ -f ./.env ] && set -a && . ./.env && set +a
+
 echo "[start-gateway] 启动 openclaw gateway ..."
-node dist/index.js gateway & GATEWAY_PID=$!
+if command -v xvfb-run > /dev/null 2>&1; then
+  xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" node dist/index.js gateway & GATEWAY_PID=$!
+else
+  node dist/index.js gateway & GATEWAY_PID=$!
+fi
 
 # 等待 gateway 监听端口就绪（最多 30 秒）
 echo "[start-gateway] 等待 gateway 端口 18789 就绪 ..."
@@ -26,13 +34,4 @@ else
   echo "[start-gateway] 警告: umount /tmp/secret_file.json 失败（可能未挂载或权限不足）"
 fi
 
-# 删除飞书APP的环境变量
-# unset FEISHU_APP_ID_STEWARD
-# unset FEISHU_APP_SECRET_STEWARD
-# unset FEISHU_APP_ID_CODER
-# unset FEISHU_APP_SECRET_CODER
-# unset FEISHU_APP_ID_CRAWLER
-# unset FEISHU_APP_SECRET_CRAWLER
-
-# 跟随 gateway 进程，保持容器存活
 wait $GATEWAY_PID

@@ -26,7 +26,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202603051600"
+VERSION="${OPENCLAW_VERSION}-build202603121558"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 
 REMOTE_HOST="rmbook"
@@ -42,6 +42,7 @@ else
     --build-arg "OPENCLAW_INSTALL_BROWSER=1" \
     --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest" \
     --build-arg "OPENCLAW_PLUGINS=@openclaw/feishu" \
+    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=xauth" \
     -t "${IMAGE_NAME}" -f Dockerfile .
 fi
 

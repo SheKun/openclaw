@@ -2,6 +2,7 @@ services:
   openclaw-gateway:
     container_name: openclaw-gateway
     image: ${OPENCLAW_IMAGE:-openclaw:local}
+    shm_size: '1gb'
     user: "root"
     env_file:
       - .env
