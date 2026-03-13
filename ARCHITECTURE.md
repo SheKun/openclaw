@@ -16,3 +16,16 @@
   - coder (FEISHU_APP_ID_CODER, FEISHU_APP_SECRET_CODER)
   - crawler (FEISHU_APP_ID_CRAWLER, FEISHU_APP_SECRET_CRAWLER)
 - **安全实践：** 为增强安全性，上述环境变量仅需要在 Node 网关读取时暂时驻留，当进程后台拉起后，应立刻在包装脚本（如 `start-gateway.sh`）内通过 `unset` 移除相关进程环境变量的副本。
+
+## 3. 扩展与插件机制 (Extensions vs Plugins)
+
+OpenClaw 采用分层的方式管理功能增强，主要区分为构建时的“依赖打包”与运行时的“加载激活”：
+
+- **OPENCLAW_EXTENSIONS (构建参数)：**
+  - **对象：** monorepo 内 `extensions/` 目录下的本地扩展。
+  - **作用：** 决定哪些扩展的 `package.json` 会参与 Docker 构建阶段的 `pnpm install`。这对于包含二进制依赖或大型底层库（如 Feishu 通道的 SDK）的扩展至关重要。
+  - **最佳实践：** 只有通过该参数打包进镜像的扩展，其依赖才是完整的。
+
+- **插件加载与激活 (Loading & Activation)：**
+  - **通道类扩展 (Channel Extensions)：** 如 Feishu 插件。只要镜像中已包含其代码（通过上述参数），且在 `channels` 配置中启用了对应通道，系统会自动激活插件，无需额外安装指令。
+  - **第三方/远程插件：** 使用 `openclaw plugins install <npm-package>`。该命令会将插件信息写入 `openclaw_conf.json` 并设为 `enabled: true`。

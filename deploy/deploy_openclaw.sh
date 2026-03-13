@@ -41,7 +41,7 @@ else
   docker build --provenance=false \
     --build-arg "OPENCLAW_INSTALL_BROWSER=1" \
     --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest" \
-    --build-arg "OPENCLAW_PLUGINS=@openclaw/feishu" \
+    --build-arg "OPENCLAW_EXTENSIONS=feishu" \
     --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=xauth" \
     -t "${IMAGE_NAME}" -f Dockerfile .
 fi
