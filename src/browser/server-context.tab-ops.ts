@@ -155,7 +155,10 @@ export function createProfileTabOps({
       }
     }
 
-    if (requiresInspectableBrowserNavigationRedirects(state().resolved.ssrfPolicy)) {
+    if (
+      url !== "about:blank" &&
+      requiresInspectableBrowserNavigationRedirects(state().resolved.ssrfPolicy)
+    ) {
       throw new InvalidBrowserNavigationUrlError(
         "Navigation blocked: strict browser SSRF policy requires Playwright-backed redirect-hop inspection",
       );
