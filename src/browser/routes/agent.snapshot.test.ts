@@ -52,7 +52,10 @@ describe("resolveTargetIdAfterNavigate", () => {
       listTabs: async () => {
         calls++;
         if (calls === 1) {
-          return [{ targetId: "unrelated-1", url: "https://unrelated.com" }];
+          return [
+            { targetId: "unrelated-1", url: "https://unrelated.com" },
+            { targetId: "unrelated-2", url: "https://unrelated2.com" },
+          ];
         }
         return [{ targetId: "delayed-999", url: "https://delayed.com" }];
       },

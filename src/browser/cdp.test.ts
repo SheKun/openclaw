@@ -92,6 +92,7 @@ describe("cdp", () => {
     const created = await createTargetViaCdp({
       cdpUrl: `http://127.0.0.1:${httpPort}`,
       url: "https://example.com",
+      ssrfPolicy: { allowPrivateNetwork: true },
     });
 
     expect(created.targetId).toBe("TARGET_123");
@@ -115,6 +116,7 @@ describe("cdp", () => {
       const created = await createTargetViaCdp({
         cdpUrl: `ws://127.0.0.1:${wsPort}/devtools/browser/TEST`,
         url: "https://example.com",
+        ssrfPolicy: { allowPrivateNetwork: true },
       });
 
       expect(created.targetId).toBe("TARGET_WS_DIRECT");
@@ -148,6 +150,7 @@ describe("cdp", () => {
     const created = await createTargetViaCdp({
       cdpUrl: `ws://127.0.0.1:${wsPort}/devtools/browser/TEST?apiKey=secret123`,
       url: "https://example.com",
+      ssrfPolicy: { allowPrivateNetwork: true },
     });
     expect(created.targetId).toBe("T_QP");
     // The WebSocket upgrade request should have been made to the URL with the query param
@@ -259,6 +262,7 @@ describe("cdp", () => {
       createTargetViaCdp({
         cdpUrl: `http://127.0.0.1:${httpPort}`,
         url: "https://example.com",
+        ssrfPolicy: { allowPrivateNetwork: true },
       }),
     ).rejects.toThrow("CDP /json/version missing webSocketDebuggerUrl");
   });

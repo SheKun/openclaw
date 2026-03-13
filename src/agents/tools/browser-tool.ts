@@ -523,6 +523,10 @@ export function createBrowserTool(opts?: {
         case "navigate": {
           const targetUrl = readTargetUrlParam(params);
           const targetId = readStringParam(params, "targetId");
+          const timeoutMs =
+            typeof params.timeoutMs === "number" && Number.isFinite(params.timeoutMs)
+              ? params.timeoutMs
+              : 25000;
           if (proxyRequest) {
             const result = await proxyRequest({
               method: "POST",
@@ -531,6 +535,7 @@ export function createBrowserTool(opts?: {
               body: {
                 url: targetUrl,
                 targetId,
+                timeoutMs,
               },
             });
             return jsonResult(result);
@@ -539,6 +544,7 @@ export function createBrowserTool(opts?: {
             await browserNavigate(baseUrl, {
               url: targetUrl,
               targetId,
+              timeoutMs,
               profile,
             }),
           );

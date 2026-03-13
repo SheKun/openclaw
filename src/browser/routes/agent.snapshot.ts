@@ -23,7 +23,7 @@ import {
   shouldUsePlaywrightForScreenshot,
 } from "./agent.snapshot.plan.js";
 import type { BrowserResponse, BrowserRouteRegistrar } from "./types.js";
-import { jsonError, toBoolean, toStringOrEmpty } from "./utils.js";
+import { jsonError, toBoolean, toNumber, toStringOrEmpty } from "./utils.js";
 
 async function saveBrowserMediaResponse(params: {
   res: BrowserResponse;
@@ -93,6 +93,7 @@ export function registerBrowserAgentSnapshotRoutes(
     const body = readBody(req);
     const url = toStringOrEmpty(body.url);
     const targetId = toStringOrEmpty(body.targetId) || undefined;
+    const timeoutMs = toNumber(body.timeoutMs);
     if (!url) {
       return jsonError(res, 400, "url is required");
     }
@@ -107,6 +108,7 @@ export function registerBrowserAgentSnapshotRoutes(
           cdpUrl,
           targetId: tab.targetId,
           url,
+          timeoutMs,
           ...withBrowserNavigationPolicy(ctx.state().resolved.ssrfPolicy),
         });
         const currentTargetId = await resolveTargetIdAfterNavigate({

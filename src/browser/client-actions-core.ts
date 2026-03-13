@@ -110,15 +110,17 @@ export async function browserNavigate(
   opts: {
     url: string;
     targetId?: string;
+    timeoutMs?: number;
     profile?: string;
   },
 ): Promise<BrowserActionTabResult> {
   const q = buildProfileQuery(opts.profile);
+  const requestedTimeout = opts.timeoutMs ?? 20000;
   return await fetchBrowserJson<BrowserActionTabResult>(withBaseUrl(baseUrl, `/navigate${q}`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url: opts.url, targetId: opts.targetId }),
-    timeoutMs: 20000,
+    body: JSON.stringify({ url: opts.url, targetId: opts.targetId, timeoutMs: opts.timeoutMs }),
+    timeoutMs: requestedTimeout + 5000,
   });
 }
 
