@@ -62,3 +62,31 @@ vendor/
 !vendor/a2ui/renderers/
 !vendor/a2ui/renderers/lit/
 !vendor/a2ui/renderers/lit/**
+
+### more to ignore
+
+# Tooling and IDE configuration
+.github/
+git-hooks/
+.gitattributes
+.gitignore
+.vscode/
+.pi/
+.mailmap
+
+# Deployment and infrastructure-as-code
+deploy/
+fly.toml
+fly.private.toml
+render.yaml
+docker-compose.yml
+Dockerfile
+Dockerfile.sandbox*
+docker-setup.sh
+setup-podman.sh
+openclaw.podman.env
+tsdown.config.ts
+appcast.xml
+.npmrc
+.env.example
+ARCHITECTURE.md

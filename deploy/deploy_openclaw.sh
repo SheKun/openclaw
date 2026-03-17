@@ -7,17 +7,19 @@ set -euo pipefail
 
 # 获取脚本所在目录并切换到项目根目录，以确保相对路径执行正确
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "${SCRIPT_DIR}/.." || exit 1
+PROJECT_ROOT="${SCRIPT_DIR}/.."
+cd "${PROJECT_ROOT}" || exit 1
 
-# 检查本地 .env 文件是否存在，如果存在则加载环境变量
-ENV_FILE="${SCRIPT_DIR}/../../.env"
-if [ -f "$ENV_FILE" ]; then
-  # 忽略注释和空行加载环境变量
-  echo "加载本地 .env 文件从: ${ENV_FILE}"
-  set -a; source <(sed 's/\r//' "$ENV_FILE"); set +a
-  set -a; source <(sed 's/\r//' "${SCRIPT_DIR}/.env"); set +a
-else
-  echo "警告: 未找到本地 .env 文件 (${ENV_FILE})."
+# 加载环境变量
+GLOBAL_ENV_FILE="${PROJECT_ROOT}/../.env"
+LOCAL_ENV_FILE="${SCRIPT_DIR}/.env"
+if [ -f "$GLOBAL_ENV_FILE" ]; then
+  echo "加载全局 .env 文件从: ${GLOBAL_ENV_FILE}"
+  set -a; source <(sed 's/\r//' "$GLOBAL_ENV_FILE"); set +a
+fi
+if [ -f "$LOCAL_ENV_FILE" ]; then
+  echo "加载本地 .env 文件从: ${LOCAL_ENV_FILE}"
+  set -a; source <(sed 's/\r//' "$LOCAL_ENV_FILE"); set +a
 fi
 
 # 从 package.json 获取openclaw版本号
@@ -26,7 +28,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202603131517"
+VERSION="${OPENCLAW_VERSION}-build202603140953"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 
 REMOTE_HOST="rmbook"
@@ -86,31 +88,11 @@ FEISHU_APP_ID_CODER_VAL=$(kp_username "${FEISHU_APP_CODER_SLOT_PATH}")
 FEISHU_APP_SECRET_CODER_VAL=$(kp_password "${FEISHU_APP_CODER_SLOT_PATH}")
 FEISHU_APP_ID_CRAWLER_VAL=$(kp_username "${FEISHU_APP_CRAWLER_SLOT_PATH}")
 FEISHU_APP_SECRET_CRAWLER_VAL=$(kp_password "${FEISHU_APP_CRAWLER_SLOT_PATH}")
-BAILIAN_API_KEY_VAL=$(kp_password "${BAILIAN_API_KEY_SLOT_PATH}")
 
-# 用 jq 安全拼接 JSON，避免特殊字符问题
-jq -n \
-  --arg feishu_app_id              "$FEISHU_APP_ID_VAL" \
-  --arg feishu_app_secret          "$FEISHU_APP_SECRET_VAL" \
-  --arg feishu_app_id_coder        "$FEISHU_APP_ID_CODER_VAL" \
-  --arg feishu_app_secret_coder    "$FEISHU_APP_SECRET_CODER_VAL" \
-  --arg feishu_app_id_crawler      "$FEISHU_APP_ID_CRAWLER_VAL" \
-  --arg feishu_app_secret_crawler  "$FEISHU_APP_SECRET_CRAWLER_VAL" \
-  --arg bailian_api_key            "$BAILIAN_API_KEY_VAL" \
-  '{
-    FEISHU_APP_ID:              $feishu_app_id,
-    FEISHU_APP_SECRET:          $feishu_app_secret,
-    FEISHU_APP_ID_CODER:        $feishu_app_id_coder,
-    FEISHU_APP_SECRET_CODER:    $feishu_app_secret_coder,
-    FEISHU_APP_ID_CRAWLER:      $feishu_app_id_crawler,
-    FEISHU_APP_SECRET_CRAWLER:  $feishu_app_secret_crawler,
-    BAILIAN_API_KEY:            $bailian_api_key
-  }' > "${SCRIPT_DIR}/secret_file.json"
-echo "secret_file.json 生成完成"
+LITELLM_API_KEY_VAL=${LITELLM_API_KEY}
 
-scp docker-compose.yml "$REMOTE_HOST:${DEPLOY_DIR}/"
+scp "${SCRIPT_DIR}/docker-compose.yml" "$REMOTE_HOST:${DEPLOY_DIR}/"
 scp "${SCRIPT_DIR}/openclaw_conf.json" "$REMOTE_HOST:${DEPLOY_DIR}/openclaw.json"
-scp "${SCRIPT_DIR}/secret_file.json" "$REMOTE_HOST:${DEPLOY_DIR}/secret_file.json"
 scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
 
 echo "4. 在远程服务器初始化与启动服务 ..."
@@ -125,13 +107,12 @@ else
   GATEWAY_TOKEN=$(openssl rand -hex 32)
 fi
 
-ssh -t "$REMOTE_HOST" "
-  export PATH=\"~/.local/bin:\$PATH\"
+echo "=> 创建部署目录 ..."
+ssh "$REMOTE_HOST" "mkdir -p ${DEPLOY_DIR}"
 
-  cd ${DEPLOY_DIR}
-  
-  # 保存 .env 文件以保证 podman-compose up -d 可以持久化加载所需的环境变量
-  cat <<EOF > .env
+# 保存 .env 文件以保证 podman-compose up -d 可以持久化加载所需的环境变量
+echo "=> 生成 .env 文件 ..."
+ssh "$REMOTE_HOST" "cat <<EOF > ${DEPLOY_DIR}/.env
 OPENCLAW_IMAGE=${IMAGE_NAME}
 OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
 OPENCLAW_CONFIG_DIR=~/.openclaw
@@ -141,20 +122,42 @@ FEISHU_APP_ID_CODER=${FEISHU_APP_ID_CODER:-}
 FEISHU_APP_SECRET_CODER=${FEISHU_APP_SECRET_CODER:-}
 FEISHU_APP_ID_CRAWLER=${FEISHU_APP_ID_CRAWLER:-}
 FEISHU_APP_SECRET_CRAWLER=${FEISHU_APP_SECRET_CRAWLER:-}
-EOF
-  
+LITELLM_API_KEY=${LITELLM_API_KEY:-}
+EOF"
+
+echo "=> 检查配置目录 ~/.openclaw ..."
+ssh "$REMOTE_HOST" "
   if [ ! -d ~/.openclaw ]; then
-    echo '=> 创建配置目录并初始化 OpenClaw 配置 ...'
+    echo '   => 创建配置目录并初始化 OpenClaw 配置 ...'
     mkdir -p ~/.openclaw
+    mkdir -p ~/.openclaw/.ssh
+    mkdir -p ~/.openclaw/.gitconfig
     cp ${DEPLOY_DIR}/openclaw.json ~/.openclaw/openclaw.json      
   else
-    echo '=> 配置目录 ~/.openclaw 已存在，跳过创建 ...'
+    echo '   => 配置目录 ~/.openclaw 已存在，跳过创建 ...'
   fi
+"
 
-  chmod 600 ./secret_file.json
-  
-  echo '=> 重新启动 openclaw-gateway 容器 ...'
-  podman-compose down openclaw-gateway > /dev/null 2>&1
+echo "=> 检查 local-llm-service 网络 ..."
+if ! ssh "$REMOTE_HOST" "podman network inspect local-llm-service >/dev/null 2>&1"; then
+  echo "❌ 错误: 未找到 local-llm-service 网络。请确保 LiteLLM 已正确部署并创建了该网络。"
+  exit 1
+fi
+
+echo "=> 检查 litellm-gateway 是否满足连通性要求 ..."
+# 使用已导入的 OpenClaw 镜像在相同网络内探测 litellm-gateway:8081
+# 使用 curl 检查 LiteLLM 的健康状态
+if ! ssh "$REMOTE_HOST" "podman run --rm --network local-llm-service ${IMAGE_NAME} curl -sSf http://litellm-gateway:8081/health/liveliness >/dev/null 2>&1"; then
+  echo "❌ 错误: 无法访问 litellm-gateway:8081。请检查 LiteLLM 容器是否正在运行且已连接到 local-llm-service 网络。"
+  exit 1
+fi
+echo "   => 连通性检查通过。"
+
+echo '=> 重新启动 openclaw-gateway 容器 ...'
+ssh -t "$REMOTE_HOST" "
+  export PATH=\"~/.local/bin:\$PATH\"
+  cd ${DEPLOY_DIR}
+  podman-compose down openclaw-gateway > /dev/null 2>&1 || true
   podman-compose up -d openclaw-gateway
 "
 

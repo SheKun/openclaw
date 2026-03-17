@@ -1,0 +1,62 @@
+services:
+  openclaw-gateway:
+    container_name: openclaw-gateway
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    shm_size: '1gb'
+    user: "root"
+    env_file:
+      - .env
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      OPENCLAW_ALLOW_INSECURE_PRIVATE_WS: ${OPENCLAW_ALLOW_INSECURE_PRIVATE_WS:-}
+      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY:-}
+      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY:-}
+      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE:-}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
+      - ./start-gateway.sh:/usr/local/bin/start-gateway.sh:ro
+      - apt_archives:/var/cache/apt/archives/
+      - npm_archives:/root/.npm
+      - npm_archives:/home/node/.npm
+      - ~/.openclaw/.ssh:/root/.ssh
+      - ~/.openclaw/.ssh:/home/node/.ssh
+      - ~/.openclaw/.gitconfig:/root/.gitconfig
+      - ~/.openclaw/.gitconfig:/home/node/.gitconfig
+      ## Uncomment the lines below to enable sandbox isolation
+      ## (agents.defaults.sandbox). Requires Docker CLI in the image
+      ## (build with --build-arg OPENCLAW_INSTALL_DOCKER_CLI=1) or use
+      ## docker-setup.sh with OPENCLAW_SANDBOX=1 for automated setup.
+      ## Set DOCKER_GID to the host's docker group GID (run: stat -c '%g' /var/run/docker.sock).
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # group_add:
+    #   - "${DOCKER_GID:-999}"
+    ports:
+      - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+      - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
+    init: true
+    restart: unless-stopped
+    command: ["sh", "/usr/local/bin/start-gateway.sh"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - local-llm-service
+
+networks:
+  local-llm-service:
+    external: true
+
+volumes:
+  apt_archives:
+  npm_archives:

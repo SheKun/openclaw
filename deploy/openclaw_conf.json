@@ -1,0 +1,189 @@
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "lan",
+    "port": 18789,
+    "auth": {
+      "mode": "token"
+    },
+    "controlUi": {
+      "enabled": true,
+      "allowedOrigins": ["https://openclaw.local:18789"]
+    },
+    "tls": {
+      "enabled": true,
+      "autoGenerate": true
+    }
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "text": true,
+    "bash": true,
+    "config": true,
+    "debug": true,
+    "restart": true,
+    "allowFrom": {}
+  },
+  "browser": {
+    "enabled": true,
+    "evaluateEnabled": true,
+    "executablePath": "${CHROMIUM_EXECUTABLE_PATH}",
+    "headless": true,
+    "noSandbox": true,
+    "defaultProfile": "openclaw",
+    "ssrfPolicy": {
+      "allowPrivateNetwork": false,
+      "dangerouslyAllowPrivateNetwork": false
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "bailian/qwen3.5-plus"
+      },
+      "maxConcurrent": 1,
+      "subagents": {
+        "maxConcurrent": 8,
+        "maxChildrenPerAgent": 4,
+        "maxSpawnDepth": 1
+      },
+      "workspace": "~/.openclaw/workspace",
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "1h"
+      },
+      "compaction": {
+        "mode": "safeguard"
+      }
+    },
+    "list": [
+      {
+        "id": "steward",
+        "default": true,
+        "name": "Adam",
+        "model": {
+          "primary": "litellm/qwen3.5-plus"
+        },
+        "subagents": {
+          "allowAgents": ["*"]
+        },
+        "tools": {
+          "deny": ["browser"]
+        }
+      },
+      {
+        "id": "coder",
+        "name": "Ape",
+        "workspace": "~/.openclaw/workspace-coder",
+        "model": {
+          "primary": "litellm/qwen3-coder-plus"
+        },
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": ["browser"]
+        }
+      },
+      {
+        "id": "crawler",
+        "name": "Spider",
+        "workspace": "~/.openclaw/workspace-crawler",
+        "model": {
+          "primary": "litellm/qwen3.5-plus"
+        },
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "allow": ["browser", "web_fetch", "web_search"]
+        }
+      }
+    ]
+  },
+  "bindings": [
+    { "agentId": "steward", "match": { "channel": "feishu", "accountId": "steward" } },
+    { "agentId": "coder", "match": { "channel": "feishu", "accountId": "coder" } },
+    { "agentId": "crawler", "match": { "channel": "feishu", "accountId": "crawler" } }
+  ],
+  "messages": {
+    "queue": {
+      "mode": "steer",
+      "debounceMs": 500,
+      "cap": 10
+    }
+  },
+  "secrets": {
+    "providers": {
+      "file": {
+        "source": "file",
+        "path": "/tmp/secret_file.json"
+      }
+    }
+  },
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "connectionMode": "websocket",
+      "domain": "feishu",
+      "dmPolicy": "allowlist",
+      "allowFrom": [],
+      "groupPolicy": "allowlist",
+      "groupAllowFrom": [],
+      "accounts": {
+        "steward": {
+          "accountId": "steward",
+          "appId": "${FEISHU_APP_ID_STEWARD}",
+          "appSecret": "${FEISHU_APP_SECRET_STEWARD}"
+        },
+        "coder": {
+          "accountId": "coder",
+          "appId": "${FEISHU_APP_ID_CODER}",
+          "appSecret": "${FEISHU_APP_SECRET_CODER}"
+        },
+        "crawler": {
+          "accountId": "crawler",
+          "appId": "${FEISHU_APP_ID_CRAWLER}",
+          "appSecret": "${FEISHU_APP_SECRET_CRAWLER}"
+        }
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "litellm": {
+        "baseUrl": "http://litellm-gateway:8081/v1",
+        "apiKey": "${LITELLM_API_KEY}",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "qwen3-max",
+            "name": "Qwen3 Max",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 262144,
+            "maxTokens": 32768
+          },
+          {
+            "id": "qwen3.5-plus",
+            "name": "Qwen3.5 Plus",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "qwen3-coder-plus",
+            "name": "Qwen3 Coder Plus",
+            "reasoning": false,
+            "input": ["text"],
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          }
+        ]
+      }
+    }
+  }
+}
