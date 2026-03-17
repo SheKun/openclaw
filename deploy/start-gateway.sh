@@ -23,12 +23,26 @@ rm -rf /home/node/.openclaw/browser/openclaw > /dev/null 2>&1
 # 加载 .env 中的环境变量（如果存在）
 [ -f ./.env ] && set -a && . ./.env && set +a
 
-echo "[start-gateway] 启动 openclaw gateway ..."
-if command -v xvfb-run > /dev/null 2>&1; then
-  xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" node dist/index.js gateway & GATEWAY_PID=$!
-else
-  node dist/index.js gateway & GATEWAY_PID=$!
+# 自动建立 CDP 隧道到宿主机 (用于访问宿主机的浏览器)
+# 假设宿主机的 CDP 专用账号为 cdp_tunnel
+if [ -f ~/.ssh/host_cdp ]; then
+  HOST_IP="172.17.0.1"
+  if [ -n "$HOST_IP" ]; then
+    echo "[start-gateway] 尝试建立 CDP 隧道至宿主机 ($HOST_IP) ..."
+    # 使用 StrictHostKeyChecking=no 避免首次连接时的手动确认
+    ssh -i ~/.ssh/host_cdp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        -N -L 9222:127.0.0.1:9222 cdp_tunnel@"$HOST_IP" &
+    TUNNEL_PID=$!
+    echo "[start-gateway] CDP 隧道已在后台运行 (PID: $TUNNEL_PID)。"
+    # 当容器退出时，确保清理隧道进程
+    trap "kill $TUNNEL_PID 2>/dev/null || true" EXIT
+  else
+    echo "[start-gateway] 警告: 无法检测到宿主机 IP，跳过 CDP 隧道建立。"
+  fi
 fi
+
+echo "[start-gateway] 启动 openclaw gateway ..."
+node dist/index.js gateway & GATEWAY_PID=$!
 
 # 等待 gateway 监听端口就绪（最多 30 秒）
 echo "[start-gateway] 等待 gateway 端口 18789 就绪 ..."

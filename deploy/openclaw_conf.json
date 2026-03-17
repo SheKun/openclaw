@@ -29,9 +29,19 @@
     "enabled": true,
     "evaluateEnabled": true,
     "executablePath": "${CHROMIUM_EXECUTABLE_PATH}",
-    "headless": true,
+    "headless": false,
     "noSandbox": true,
-    "defaultProfile": "openclaw",
+    "defaultProfile": "host-chrome",
+    "profiles": {
+      "openclaw": {
+        "cdpPort": 18800,
+        "color": "#FF4500"
+      },
+      "host-chrome": {
+        "cdpUrl": "http://127.0.0.1:9222",
+        "color": "#00AA00"
+      }
+    },
     "ssrfPolicy": {
       "allowPrivateNetwork": false,
       "dangerouslyAllowPrivateNetwork": false
@@ -113,14 +123,6 @@
       "mode": "steer",
       "debounceMs": 500,
       "cap": 10
-    }
-  },
-  "secrets": {
-    "providers": {
-      "file": {
-        "source": "file",
-        "path": "/tmp/secret_file.json"
-      }
     }
   },
   "channels": {

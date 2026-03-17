@@ -93,6 +93,7 @@ LITELLM_API_KEY_VAL=${LITELLM_API_KEY}
 scp "${SCRIPT_DIR}/docker-compose.yml" "$REMOTE_HOST:${DEPLOY_DIR}/"
 scp "${SCRIPT_DIR}/openclaw_conf.json" "$REMOTE_HOST:${DEPLOY_DIR}/openclaw.json"
 scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
+scp "${SCRIPT_DIR}/create_cdp_user.sh" "$REMOTE_HOST:${DEPLOY_DIR}/create_cdp_user.sh"
 
 echo "4. 在远程服务器初始化与启动服务 ..."
 # 检查是否已有 .env 并提取 Gateway Token
@@ -192,4 +193,9 @@ echo ""
 echo "▶ 3. 查看运行日志"
 echo "如需查看网关运行日志，可执行："
 echo "   podman-compose logs -f openclaw-gateway"
+echo ""
+echo "▶ 4. 建立 CDP 浏览器隧道 (可选)"
+echo "如果你希望在宿主机上运行 Chrome 浏览器并让容器访问，请在服务器上执行一次初始化脚本："
+echo "   sudo bash ${DEPLOY_DIR}/create_cdp_user.sh"
+echo "该脚本会创建隧道账号 cdp_tunnel 并自动配置 SSH 密钥，容器重启后会自动建立隧道。"
 echo "----------------------------------------------------"
