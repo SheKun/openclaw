@@ -18,7 +18,7 @@ echo "[start-gateway] 尝试配置 apt 缓存 ..."
 
 
 #删除浏览器文件，防止浏览器无法启动
-rm -f /home/node/.openclaw/browser/openclaw > /dev/null 2>&1
+rm -rf /home/node/.openclaw/browser/openclaw > /dev/null 2>&1
 
 # 加载 .env 中的环境变量（如果存在）
 [ -f ./.env ] && set -a && . ./.env && set +a
