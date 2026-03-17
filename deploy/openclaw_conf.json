@@ -15,6 +15,16 @@
       "autoGenerate": true
     }
   },
+  "memory": {
+    "backend": "qmd"
+  },
+  "plugins": {
+    "entries": {
+      "feishu": {
+        "enabled": true
+      }
+    }
+  },
   "commands": {
     "native": "auto",
     "nativeSkills": "auto",
@@ -79,7 +89,7 @@
           "allowAgents": ["*"]
         },
         "tools": {
-          "deny": ["browser"]
+          "profile": "full"
         }
       },
       {
@@ -98,17 +108,18 @@
         }
       },
       {
-        "id": "crawler",
-        "name": "Spider",
-        "workspace": "~/.openclaw/workspace-crawler",
+        "id": "planner",
+        "name": "Fox",
+        "workspace": "~/.openclaw/workspace-planner",
         "model": {
-          "primary": "litellm/qwen3.5-plus"
+          "primary": "litellm/qwen3-max"
         },
         "subagents": {
           "allowAgents": []
         },
         "tools": {
-          "allow": ["browser", "web_fetch", "web_search"]
+          "profile": "full",
+          "deny": ["browser"]
         }
       }
     ]
@@ -116,7 +127,7 @@
   "bindings": [
     { "agentId": "steward", "match": { "channel": "feishu", "accountId": "steward" } },
     { "agentId": "coder", "match": { "channel": "feishu", "accountId": "coder" } },
-    { "agentId": "crawler", "match": { "channel": "feishu", "accountId": "crawler" } }
+    { "agentId": "planner", "match": { "channel": "feishu", "accountId": "planner" } }
   ],
   "messages": {
     "queue": {
@@ -131,9 +142,13 @@
       "connectionMode": "websocket",
       "domain": "feishu",
       "dmPolicy": "allowlist",
-      "allowFrom": [],
       "groupPolicy": "allowlist",
-      "groupAllowFrom": [],
+      "allowFrom": [
+        "ou_4290ea171c15d637f2b77fbe49837677",
+        "ou_0498da08e35c3f356cec322fe2896986",
+        "ou_8b8d96a3c236372093e2717c879ccaad"
+      ],
+      "groupAllowFrom": ["oc_63168d210b0475e95d43d7341b97af7c"],
       "accounts": {
         "steward": {
           "accountId": "steward",
@@ -145,10 +160,10 @@
           "appId": "${FEISHU_APP_ID_CODER}",
           "appSecret": "${FEISHU_APP_SECRET_CODER}"
         },
-        "crawler": {
-          "accountId": "crawler",
-          "appId": "${FEISHU_APP_ID_CRAWLER}",
-          "appSecret": "${FEISHU_APP_SECRET_CRAWLER}"
+        "planner": {
+          "accountId": "planner",
+          "appId": "${FEISHU_APP_ID_PLANNER}",
+          "appSecret": "${FEISHU_APP_SECRET_PLANNER}"
         }
       }
     }

@@ -68,7 +68,7 @@ if [ ! -f "$KEEPASS_FILE" ]; then
 fi
 
 FEISHU_APP_STEWARD_SLOT_PATH="飞书/家庭/FEISHU_APP_STEWARD"
-FEISHU_APP_CRAWLER_SLOT_PATH="飞书/家庭/FEISHU_APP_CRAWLER"
+FEISHU_APP_PLANNER_SLOT_PATH="飞书/家庭/FEISHU_APP_PLANNER"
 FEISHU_APP_CODER_SLOT_PATH="飞书/家庭/FEISHU_APP_CODER"
 
 # 辅助函数: 从 KeePass 条目读取 UserName 属性（对应 AppID）
@@ -81,14 +81,14 @@ kp_password() {
   echo "${KEEPASS_PASSWORD}" | keepassxc-cli show -q -a Password "$KEEPASS_FILE" "$1" 2>&1
 }
 
-FEISHU_APP_ID_VAL=$(kp_username "${FEISHU_APP_STEWARD_SLOT_PATH}")
-FEISHU_APP_SECRET_VAL=$(kp_password "${FEISHU_APP_STEWARD_SLOT_PATH}")
-FEISHU_APP_ID_CODER_VAL=$(kp_username "${FEISHU_APP_CODER_SLOT_PATH}")
-FEISHU_APP_SECRET_CODER_VAL=$(kp_password "${FEISHU_APP_CODER_SLOT_PATH}")
-FEISHU_APP_ID_CRAWLER_VAL=$(kp_username "${FEISHU_APP_CRAWLER_SLOT_PATH}")
-FEISHU_APP_SECRET_CRAWLER_VAL=$(kp_password "${FEISHU_APP_CRAWLER_SLOT_PATH}")
+FEISHU_APP_ID_STEWARD=$(kp_username "${FEISHU_APP_STEWARD_SLOT_PATH}")
+FEISHU_APP_SECRET_STEWARD=$(kp_password "${FEISHU_APP_STEWARD_SLOT_PATH}")
+FEISHU_APP_ID_CODER=$(kp_username "${FEISHU_APP_CODER_SLOT_PATH}")
+FEISHU_APP_SECRET_CODER=$(kp_password "${FEISHU_APP_CODER_SLOT_PATH}")
+FEISHU_APP_ID_PLANNER=$(kp_username "${FEISHU_APP_PLANNER_SLOT_PATH}")
+FEISHU_APP_SECRET_PLANNER=$(kp_password "${FEISHU_APP_PLANNER_SLOT_PATH}")
 
-LITELLM_API_KEY_VAL=${LITELLM_API_KEY}
+# LITELLM_API_KEY is loaded from .env already
 
 scp "${SCRIPT_DIR}/docker-compose.yml" "$REMOTE_HOST:${DEPLOY_DIR}/"
 scp "${SCRIPT_DIR}/openclaw_conf.json" "$REMOTE_HOST:${DEPLOY_DIR}/openclaw.json"
@@ -120,8 +120,8 @@ FEISHU_APP_ID_STEWARD=${FEISHU_APP_ID_STEWARD:-}
 FEISHU_APP_SECRET_STEWARD=${FEISHU_APP_SECRET_STEWARD:-}
 FEISHU_APP_ID_CODER=${FEISHU_APP_ID_CODER:-}
 FEISHU_APP_SECRET_CODER=${FEISHU_APP_SECRET_CODER:-}
-FEISHU_APP_ID_CRAWLER=${FEISHU_APP_ID_CRAWLER:-}
-FEISHU_APP_SECRET_CRAWLER=${FEISHU_APP_SECRET_CRAWLER:-}
+FEISHU_APP_ID_PLANNER=${FEISHU_APP_ID_PLANNER:-}
+FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
 LITELLM_API_KEY=${LITELLM_API_KEY:-}
 EOF"
 
@@ -131,12 +131,14 @@ ssh "$REMOTE_HOST" "
     echo '   => 创建配置目录并初始化 OpenClaw 配置 ...'
     mkdir -p ~/.openclaw
     mkdir -p ~/.openclaw/.ssh
-    mkdir -p ~/.openclaw/.gitconfig
-    cp ${DEPLOY_DIR}/openclaw.json ~/.openclaw/openclaw.json      
+    mkdir -p ~/.openclaw/.gitconfig   
   else
     echo '   => 配置目录 ~/.openclaw 已存在，跳过创建 ...'
   fi
 "
+
+echo "=> 复制 openclaw.json 到 ~/.openclaw/openclaw.json ..."
+ssh "$REMOTE_HOST" "cp ${DEPLOY_DIR}/openclaw.json ~/.openclaw/openclaw.json"
 
 echo "=> 检查 local-llm-service 网络 ..."
 if ! ssh "$REMOTE_HOST" "podman network inspect local-llm-service >/dev/null 2>&1"; then
