@@ -9,6 +9,9 @@ set -e
 #阻止ubuntu清理deb文件缓存，方便后续快速安装
 rm -f /etc/apt/apt.conf.d/docker-clean
 
+#删除浏览器锁文件，防止浏览器无法启动
+rm /home/node/.openclaw/browser/SingletonLock > /dev/null 2>&1
+
 # 加载 .env 中的环境变量（如果存在）
 [ -f ./.env ] && set -a && . ./.env && set +a
 
