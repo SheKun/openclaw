@@ -7,10 +7,18 @@
 set -e
 
 #阻止ubuntu清理deb文件缓存，方便后续快速安装
-rm -f /etc/apt/apt.conf.d/docker-clean
+echo "[start-gateway] 尝试配置 apt 缓存 ..."
+{
+  # 移除 docker-clean 配置文件，因为它包含 Post-Invoke 钩子会强制删除 .deb 缓存
+  [ -f /etc/apt/apt.conf.d/docker-clean ] && rm -f /etc/apt/apt.conf.d/docker-clean
+  echo 'Binary::apt::APT::Keep-Downloaded-Packages "1";' > /etc/apt/apt.conf.d/01keep-cache \
+    && echo 'APT::Keep-Downloaded-Packages "1";' >> /etc/apt/apt.conf.d/01keep-cache
+  echo "[start-gateway] apt 缓存配置成功。"
+} || echo "[start-gateway] 跳过 apt 缓存配置 (可能由于权限不足)。"
 
-#删除浏览器锁文件，防止浏览器无法启动
-rm /home/node/.openclaw/browser/SingletonLock > /dev/null 2>&1
+
+#删除浏览器文件，防止浏览器无法启动
+rm -f /home/node/.openclaw/browser/openclaw > /dev/null 2>&1
 
 # 加载 .env 中的环境变量（如果存在）
 [ -f ./.env ] && set -a && . ./.env && set +a
