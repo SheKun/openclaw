@@ -59,16 +59,12 @@
   },
   "agents": {
     "defaults": {
-      "model": {
-        "primary": "bailian/qwen3.5-plus"
-      },
       "maxConcurrent": 1,
       "subagents": {
         "maxConcurrent": 8,
         "maxChildrenPerAgent": 4,
         "maxSpawnDepth": 1
       },
-      "workspace": "~/.openclaw/workspace",
       "contextPruning": {
         "mode": "cache-ttl",
         "ttl": "1h"
@@ -82,6 +78,7 @@
         "id": "steward",
         "default": true,
         "name": "Adam",
+        "workspace": "~/.openclaw/workspace-steward",
         "model": {
           "primary": "litellm/qwen3.5-plus"
         },
