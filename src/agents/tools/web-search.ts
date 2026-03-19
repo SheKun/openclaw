@@ -1361,6 +1361,9 @@ async function runKimiSearch(params: {
             model: params.model,
             messages,
             tools: [KIMI_WEB_SEARCH_TOOL],
+            extra_body: {
+              thinking: { type: "disabled" },
+            },
           }),
         },
       },
