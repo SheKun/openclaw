@@ -85,8 +85,6 @@ Dockerfile.sandbox*
 docker-setup.sh
 setup-podman.sh
 openclaw.podman.env
-tsdown.config.ts
 appcast.xml
-.npmrc
 .env.example
 ARCHITECTURE.md

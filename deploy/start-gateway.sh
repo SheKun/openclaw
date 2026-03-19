@@ -42,7 +42,7 @@ if [ -f ~/.ssh/host_cdp ]; then
 fi
 
 echo "[start-gateway] 启动 openclaw gateway ..."
-node dist/index.js gateway & GATEWAY_PID=$!
+node openclaw.mjs gateway --allow-unconfigured & GATEWAY_PID=$!
 
 # 等待 gateway 监听端口就绪（最多 30 秒）
 echo "[start-gateway] 等待 gateway 端口 18789 就绪 ..."
