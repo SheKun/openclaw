@@ -35,6 +35,15 @@
           "model": "qwen3.5-flash-search"
         }
       }
+    },
+    "elevated": {
+      "allowFrom": {
+        "feishu": [
+          "ou_4290ea171c15d637f2b77fbe49837677",
+          "ou_0498da08e35c3f356cec322fe2896986",
+          "ou_8b8d96a3c236372093e2717c879ccaad"
+        ]
+      }
     }
   },
   "commands": {
@@ -43,9 +52,14 @@
     "text": true,
     "bash": true,
     "config": true,
-    "debug": true,
     "restart": true,
-    "allowFrom": {}
+    "allowFrom": {
+      "feishu": [
+        "ou_4290ea171c15d637f2b77fbe49837677",
+        "ou_0498da08e35c3f356cec322fe2896986",
+        "ou_8b8d96a3c236372093e2717c879ccaad"
+      ]
+    }
   },
   "browser": {
     "enabled": true,
@@ -69,6 +83,19 @@
       "dangerouslyAllowPrivateNetwork": false
     }
   },
+  "session": {
+    "dmScope": "per-peer",
+    "maintenance": {
+      "mode": "enforce",
+      "pruneAfter": "30d",
+      "maxEntries": 500
+    },
+    "reset": {
+      "mode": "daily",
+      "atHour": 4,
+      "idleMinutes": 120
+    }
+  },
   "agents": {
     "defaults": {
       "maxConcurrent": 1,
@@ -79,10 +106,17 @@
       },
       "contextPruning": {
         "mode": "cache-ttl",
-        "ttl": "1h"
+        "ttl": "20m"
       },
       "compaction": {
-        "mode": "safeguard"
+        "reserveTokensFloor": 20000,
+        "model": "litellm/qwen3.5-plus",
+        "memoryFlush": {
+          "enabled": true,
+          "softThresholdTokens": 10000,
+          "prompt": "Write user's preferences, habits you just learned to MEMORY.md and other import facts to memory/YYYY-MM-DD.md. Reply with NO_REPLY if nothing to store.",
+          "systemPrompt": "This chat is about to end. Summarize them in a few words and write them down."
+        }
       }
     },
     "list": [
