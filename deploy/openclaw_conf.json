@@ -37,6 +37,7 @@
       }
     },
     "elevated": {
+      "enabled": true,
       "allowFrom": {
         "feishu": [
           "ou_4290ea171c15d637f2b77fbe49837677",
@@ -44,6 +45,11 @@
           "ou_8b8d96a3c236372093e2717c879ccaad"
         ]
       }
+    },
+    "exec": {
+      "host": "sandbox",
+      "security": "deny",
+      "ask": "on-miss"
     }
   },
   "commands": {
@@ -117,7 +123,8 @@
           "prompt": "Write user's preferences, habits you just learned to MEMORY.md and other import facts to memory/YYYY-MM-DD.md. Reply with NO_REPLY if nothing to store.",
           "systemPrompt": "This chat is about to end. Summarize them in a few words and write them down."
         }
-      }
+      },
+      "elevatedDefault": "full"
     },
     "list": [
       {
@@ -147,7 +154,10 @@
         },
         "tools": {
           "profile": "coding",
-          "deny": ["browser"]
+          "deny": ["browser"],
+          "elevated": {
+            "enabled": false
+          }
         }
       },
       {
@@ -162,7 +172,10 @@
         },
         "tools": {
           "profile": "full",
-          "deny": ["browser"]
+          "deny": ["browser"],
+          "elevated": {
+            "enabled": false
+          }
         }
       }
     ]
