@@ -20,6 +20,9 @@
   },
   "plugins": {
     "entries": {
+      "browser": {
+        "enabled": true
+      },
       "feishu": {
         "enabled": true
       }
@@ -75,10 +78,6 @@
     "noSandbox": true,
     "defaultProfile": "host-chrome",
     "profiles": {
-      "openclaw": {
-        "cdpPort": 18800,
-        "color": "#FF4500"
-      },
       "host-chrome": {
         "cdpUrl": "http://127.0.0.1:9222",
         "color": "#00AA00"
@@ -195,17 +194,14 @@
       "groupAllowFrom": ["oc_63168d210b0475e95d43d7341b97af7c"],
       "accounts": {
         "steward": {
-          "accountId": "steward",
           "appId": "${FEISHU_APP_ID_STEWARD}",
           "appSecret": "${FEISHU_APP_SECRET_STEWARD}"
         },
         "coder": {
-          "accountId": "coder",
           "appId": "${FEISHU_APP_ID_CODER}",
           "appSecret": "${FEISHU_APP_SECRET_CODER}"
         },
         "planner": {
-          "accountId": "planner",
           "appId": "${FEISHU_APP_ID_PLANNER}",
           "appSecret": "${FEISHU_APP_SECRET_PLANNER}"
         }
