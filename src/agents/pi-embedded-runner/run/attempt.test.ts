@@ -1,28 +1,35 @@
 import { describe, expect, it, vi } from "vitest";
+import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
 import type { OpenClawConfig } from "../../../config/config.js";
+import {
+  isOllamaCompatProvider,
+  resolveOllamaBaseUrlForRun,
+  resolveOllamaCompatNumCtxEnabled,
+  shouldInjectOllamaCompatNumCtx,
+  wrapOllamaCompatNumCtx,
+} from "../../../plugin-sdk/ollama.js";
 import { appendBootstrapPromptWarning } from "../../bootstrap-budget.js";
-import { resolveOllamaBaseUrlForRun } from "../../ollama-stream.js";
 import { buildAgentSystemPrompt } from "../../system-prompt.js";
+import { buildEmbeddedSystemPrompt } from "../system-prompt.js";
 import {
   buildAfterTurnRuntimeContext,
   buildSessionsYieldContextMessage,
   composeSystemPromptWithHookContext,
   persistSessionsYieldContextMessage,
-  isOllamaCompatProvider,
   prependSystemPromptAddition,
   queueSessionsYieldInterruptMessage,
   resolveAttemptFsWorkspaceOnly,
-  resolveOllamaCompatNumCtxEnabled,
   resolvePromptBuildHookResult,
   resolvePromptModeForSession,
   stripSessionsYieldArtifacts,
-  shouldInjectOllamaCompatNumCtx,
+  shouldInjectHeartbeatPrompt,
   decodeHtmlEntitiesInObject,
-  wrapOllamaCompatNumCtx,
   wrapStreamFnRepairMalformedToolCallArguments,
   wrapStreamFnSanitizeMalformedToolCalls,
   wrapStreamFnTrimToolCallNames,
+  resolveEmbeddedAgentStreamFn,
 } from "./attempt.js";
+import { shouldInjectHeartbeatPromptForTrigger } from "./trigger-policy.js";
 
 type FakeWrappedStream = {
   result: () => Promise<unknown>;
@@ -313,6 +320,71 @@ describe("resolvePromptModeForSession", () => {
     expect(resolvePromptModeForSession(undefined)).toBe("full");
     expect(resolvePromptModeForSession("agent:main")).toBe("full");
     expect(resolvePromptModeForSession("agent:main:thread:abc")).toBe("full");
+  });
+});
+
+describe("shouldInjectHeartbeatPrompt", () => {
+  it("uses trigger policy defaults for non-cron triggers", () => {
+    expect(shouldInjectHeartbeatPromptForTrigger("user")).toBe(true);
+    expect(shouldInjectHeartbeatPromptForTrigger("heartbeat")).toBe(true);
+    expect(shouldInjectHeartbeatPromptForTrigger("memory")).toBe(true);
+    expect(shouldInjectHeartbeatPromptForTrigger(undefined)).toBe(true);
+  });
+
+  it("uses trigger policy overrides for cron", () => {
+    expect(shouldInjectHeartbeatPromptForTrigger("cron")).toBe(false);
+  });
+
+  it("injects the heartbeat prompt for default-agent non-cron runs", () => {
+    expect(shouldInjectHeartbeatPrompt({ isDefaultAgent: true, trigger: "user" })).toBe(true);
+    expect(shouldInjectHeartbeatPrompt({ isDefaultAgent: true, trigger: "heartbeat" })).toBe(true);
+    expect(shouldInjectHeartbeatPrompt({ isDefaultAgent: true, trigger: "memory" })).toBe(true);
+    expect(shouldInjectHeartbeatPrompt({ isDefaultAgent: true, trigger: undefined })).toBe(true);
+  });
+
+  it("suppresses the heartbeat prompt for cron-triggered runs", () => {
+    expect(shouldInjectHeartbeatPrompt({ isDefaultAgent: true, trigger: "cron" })).toBe(false);
+  });
+
+  it("suppresses the heartbeat prompt for non-default agents", () => {
+    expect(shouldInjectHeartbeatPrompt({ isDefaultAgent: false, trigger: "user" })).toBe(false);
+  });
+
+  it("omits heartbeat prompt content for cron-triggered full-mode runs on non-cron session keys", () => {
+    const sessionKey = "agent:main:kos:thread:abc";
+    expect(resolvePromptModeForSession(sessionKey)).toBe("full");
+
+    const heartbeatPrompt = shouldInjectHeartbeatPrompt({
+      isDefaultAgent: true,
+      trigger: "cron",
+    })
+      ? resolveHeartbeatPrompt(undefined)
+      : undefined;
+
+    const prompt = buildEmbeddedSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      defaultThinkLevel: "off",
+      reasoningLevel: "off",
+      reasoningTagHint: false,
+      heartbeatPrompt,
+      promptMode: resolvePromptModeForSession(sessionKey),
+      runtimeInfo: {
+        host: "host",
+        os: "Darwin",
+        arch: "arm64",
+        node: "v22.0.0",
+        model: "openai/gpt-5.4",
+      },
+      tools: [],
+      modelAliasLines: [],
+      userTimezone: "UTC",
+      userTime: "00:00",
+      userTimeFormat: "24",
+    });
+
+    expect(prompt).not.toContain("## Heartbeats");
+    expect(prompt).not.toContain("HEARTBEAT_OK");
+    expect(prompt).not.toContain("Read HEARTBEAT.md");
   });
 });
 
@@ -1736,6 +1808,50 @@ describe("shouldInjectOllamaCompatNumCtx", () => {
         providerId: "ollama",
       }),
     ).toBe(false);
+  });
+});
+
+describe("resolveEmbeddedAgentStreamFn", () => {
+  it("keeps the session-managed HTTP stream when no override applies", () => {
+    const currentStreamFn = vi.fn();
+
+    const resolved = resolveEmbeddedAgentStreamFn({
+      currentStreamFn: currentStreamFn as never,
+      shouldUseWebSocketTransport: false,
+      sessionId: "session-1",
+      model: { provider: "xai" } as never,
+    });
+
+    expect(resolved).toBe(currentStreamFn);
+  });
+
+  it("keeps the session-managed HTTP stream when websocket auth is unavailable", () => {
+    const currentStreamFn = vi.fn();
+
+    const resolved = resolveEmbeddedAgentStreamFn({
+      currentStreamFn: currentStreamFn as never,
+      shouldUseWebSocketTransport: true,
+      wsApiKey: undefined,
+      sessionId: "session-1",
+      model: { provider: "xai" } as never,
+    });
+
+    expect(resolved).toBe(currentStreamFn);
+  });
+
+  it("prefers a provider-owned stream override when present", () => {
+    const currentStreamFn = vi.fn();
+    const providerStreamFn = vi.fn();
+
+    const resolved = resolveEmbeddedAgentStreamFn({
+      currentStreamFn: currentStreamFn as never,
+      providerStreamFn: providerStreamFn as never,
+      shouldUseWebSocketTransport: false,
+      sessionId: "session-1",
+      model: { provider: "xai" } as never,
+    });
+
+    expect(resolved).toBe(providerStreamFn);
   });
 });
 
