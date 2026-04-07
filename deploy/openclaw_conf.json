@@ -25,6 +25,17 @@
       },
       "feishu": {
         "enabled": true
+      },
+      "lobster": {
+        "enabled": true
+      },
+      "llm-task": {
+        "enabled": true,
+        "config": {
+          "allowedModels": ["litellm/qwen3.5-flash"],
+          "defaultProvider": "litellm",
+          "defaultModel": "qwen3.5-flash"
+        }
       }
     }
   },
@@ -62,6 +73,7 @@
     "bash": true,
     "config": true,
     "restart": true,
+    "plugins": true,
     "allowFrom": {
       "feishu": [
         "ou_4290ea171c15d637f2b77fbe49837677",
@@ -103,7 +115,8 @@
   },
   "agents": {
     "defaults": {
-      "maxConcurrent": 1,
+      "maxConcurrent": 4,
+      "verboseDefault": "on",
       "subagents": {
         "maxConcurrent": 8,
         "maxChildrenPerAgent": 4,
@@ -132,11 +145,13 @@
         "name": "Adam",
         "workspace": "~/.openclaw/workspace-steward",
         "model": "litellm/qwen3.5-plus",
+        "reasoningDefault": "on",
         "subagents": {
           "allowAgents": ["*"]
         },
         "tools": {
-          "profile": "full"
+          "profile": "full",
+          "alsoAllow": ["lobster", "llm-task"]
         }
       },
       {
@@ -226,6 +241,14 @@
           {
             "id": "qwen3.5-plus",
             "name": "Qwen3.5 Plus",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 65536
+          },
+          {
+            "id": "qwen3.5-flash",
+            "name": "Qwen3.5 Flash",
             "reasoning": true,
             "input": ["text", "image"],
             "contextWindow": 1000000,

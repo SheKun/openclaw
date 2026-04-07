@@ -28,7 +28,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202603301517"
+VERSION="${OPENCLAW_VERSION}-build202604071437"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 
 REMOTE_HOST="rmbook"
@@ -42,8 +42,8 @@ else
   # 关闭 provenance 来源证明生成，彻底解决较老版本 podman 3.4 导入 tar 包后 tag 变成 localhost 的问题
   docker build --provenance=false \
     --build-arg "OPENCLAW_INSTALL_BROWSER=1" \
-    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest" \
-    --build-arg "OPENCLAW_EXTENSIONS=feishu" \
+    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest @clawdbot/lobster@latest" \
+    --build-arg "OPENCLAW_EXTENSIONS=feishu llm-task lobster" \
     --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=xauth" \
     -t "${IMAGE_NAME}" -f Dockerfile .
 fi
@@ -160,8 +160,8 @@ echo '=> 重新启动 openclaw-gateway 容器 ...'
 ssh -t "$REMOTE_HOST" "
   export PATH=\"~/.local/bin:\$PATH\"
   cd ${DEPLOY_DIR}
-  podman-compose down openclaw-gateway > /dev/null 2>&1 || true
-  podman-compose up -d openclaw-gateway
+  podman-compose down > /dev/null 2>&1 || true
+  podman-compose up -d
 "
 
 echo ""
