@@ -139,3 +139,4 @@ changelog/fragments/
 
 # Local scratch workspace
 .tmp/
+openclaw.code-workspace

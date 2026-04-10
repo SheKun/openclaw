@@ -39,6 +39,92 @@
       }
     }
   },
+  "skills": {
+    "allowBundled": [
+      "clawhub",
+      "skill-creator",
+      "camsnap",
+      "video-frames",
+      "session-logs",
+      "node-connect",
+      "mcporter",
+      "healthcheck",
+      "nano-pdf",
+      "himalaya",
+      "goplaces",
+      "github",
+      "gh-issues",
+      "coding-agent",
+      "blogwatcher",
+      "discord",
+      "weather"
+    ],
+    "load": {
+      "extraDirs": ["~/.openclaw/workspace-shared/skills"],
+      "watch": true,
+      "watchDebounceMs": 250
+    },
+    "install": {
+      "preferBrew": true,
+      "nodeManager": "npm"
+    },
+    "entries": {
+      "clawhub": {
+        "enabled": true
+      },
+      "camsnap": {
+        "enabled": true
+      },
+      "video-frames": {
+        "enabled": true
+      },
+      "session-logs": {
+        "enabled": true
+      },
+      "mcporter": {
+        "enabled": true
+      },
+      "nano-pdf": {
+        "enabled": true
+      },
+      "himalaya": {
+        "enabled": true
+      },
+      "goplaces": {
+        "enabled": true
+      },
+      "github": {
+        "enabled": true,
+        "env": {
+          "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+        }
+      },
+      "gh-issues": {
+        "enabled": true,
+        "env": {
+          "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+        }
+      },
+      "coding-agent": {
+        "enabled": true
+      },
+      "blogwatcher": {
+        "enabled": true
+      },
+      "discord": {
+        "enabled": true
+      },
+      "keepassxc": {
+        "enabled": true,
+        "env": {
+          "KEEPASS_DB_PASS": "${AGENT_SECRET_DB_PASSWORD}"
+        },
+        "config": {
+          "dbPath": "~/.openclaw/workspace-shared/secrets.kdbx"
+        }
+      }
+    }
+  },
   "tools": {
     "web": {
       "search": {
@@ -183,15 +269,34 @@
     ]
   },
   "bindings": [
-    { "agentId": "steward", "match": { "channel": "feishu", "accountId": "steward" } },
-    { "agentId": "coder", "match": { "channel": "feishu", "accountId": "coder" } },
-    { "agentId": "planner", "match": { "channel": "feishu", "accountId": "planner" } }
+    {
+      "agentId": "steward",
+      "match": {
+        "channel": "feishu",
+        "accountId": "steward"
+      }
+    },
+    {
+      "agentId": "coder",
+      "match": {
+        "channel": "feishu",
+        "accountId": "coder"
+      }
+    },
+    {
+      "agentId": "planner",
+      "match": {
+        "channel": "feishu",
+        "accountId": "planner"
+      }
+    }
   ],
   "messages": {
     "queue": {
-      "mode": "steer",
-      "debounceMs": 500,
-      "cap": 10
+      "mode": "collect",
+      "debounceMs": 1000,
+      "cap": 20,
+      "drop": "summarize"
     }
   },
   "channels": {

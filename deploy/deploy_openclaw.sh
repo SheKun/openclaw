@@ -28,7 +28,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202604071437"
+VERSION="${OPENCLAW_VERSION}-build202604101639"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 
 REMOTE_HOST="rmbook"
@@ -44,7 +44,7 @@ else
     --build-arg "OPENCLAW_INSTALL_BROWSER=1" \
     --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest @clawdbot/lobster@latest" \
     --build-arg "OPENCLAW_EXTENSIONS=feishu llm-task lobster" \
-    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=xauth" \
+    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=xauth keepassxc" \
     -t "${IMAGE_NAME}" -f Dockerfile .
 fi
 
@@ -88,8 +88,6 @@ FEISHU_APP_SECRET_CODER=$(kp_password "${FEISHU_APP_CODER_SLOT_PATH}")
 FEISHU_APP_ID_PLANNER=$(kp_username "${FEISHU_APP_PLANNER_SLOT_PATH}")
 FEISHU_APP_SECRET_PLANNER=$(kp_password "${FEISHU_APP_PLANNER_SLOT_PATH}")
 
-# LITELLM_API_KEY is loaded from .env already
-
 scp "${SCRIPT_DIR}/docker-compose.yml" "$REMOTE_HOST:${DEPLOY_DIR}/"
 scp "${SCRIPT_DIR}/openclaw_conf.json" "$REMOTE_HOST:${DEPLOY_DIR}/openclaw.json"
 scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
@@ -124,6 +122,8 @@ FEISHU_APP_ID_PLANNER=${FEISHU_APP_ID_PLANNER:-}
 FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
 LITELLM_API_KEY=${LITELLM_API_KEY:-}
 PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
+GITHUB_TOKEN=${GITHUB_TOKEN:-}
+AGENT_SECRET_DB_PASSWORD=${AGENT_SECRET_DB_PASSWORD:-}
 EOF"
 
 echo "=> 检查配置目录 ~/.openclaw ..."
