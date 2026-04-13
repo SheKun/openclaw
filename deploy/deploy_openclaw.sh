@@ -1,6 +1,6 @@
 #!/bin/bash
 # 依照 OpenClaw Docker 文档步骤：本地构造镜像，导出并通过 SSH 部署到远程服务器
-# 目标主机: rmbook
+# 目标主机: 默认为 rmbook，可通过第一个参数指定
 
 # 设置脚本在遇到错误 (-e)、未定义变量 (-u) 或管道命令失败 (-o pipefail) 时立即退出
 set -euo pipefail
@@ -31,7 +31,7 @@ fi
 VERSION="${OPENCLAW_VERSION}-build202604101639"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 
-REMOTE_HOST="rmbook"
+REMOTE_HOST="${1:-rmbook}"
 DEPLOY_DIR="~/openclaw-deploy"
 
 echo "1. 检查是否存在镜像 ${IMAGE_NAME} ..."

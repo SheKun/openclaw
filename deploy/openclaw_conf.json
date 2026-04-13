@@ -170,7 +170,7 @@
   },
   "browser": {
     "enabled": true,
-    "evaluateEnabled": true,
+    "evaluateEnabled": false,
     "executablePath": "${CHROMIUM_EXECUTABLE_PATH}",
     "headless": false,
     "noSandbox": true,
@@ -182,8 +182,7 @@
       }
     },
     "ssrfPolicy": {
-      "allowPrivateNetwork": false,
-      "dangerouslyAllowPrivateNetwork": false
+      "allowedHostnames": ["localhost", "127.0.0.1"]
     }
   },
   "session": {
