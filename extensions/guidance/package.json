@@ -1,0 +1,12 @@
+{
+  "name": "@openclaw/guidance",
+  "version": "2026.3.28",
+  "private": true,
+  "description": "OpenClaw guidance context engine plugin",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

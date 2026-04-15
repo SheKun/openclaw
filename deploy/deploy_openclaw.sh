@@ -28,7 +28,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202604101639"
+VERSION="${OPENCLAW_VERSION}-build202604151534"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 
 REMOTE_HOST="${1:-rmbook}"
@@ -163,6 +163,23 @@ ssh -t "$REMOTE_HOST" "
   podman-compose down > /dev/null 2>&1 || true
   podman-compose up -d
 "
+
+echo '=> 同步自定义插件 ...'
+CUSTOM_EXTENSIONS="guidance" # 这里可以添加更多自定义插件名称，空格分隔
+if [ -n "$CUSTOM_EXTENSIONS" ]; then
+  for ext in $CUSTOM_EXTENSIONS; do
+    if [ -d "extensions/$ext" ]; then
+      echo "   -> 正在同步扩展: $ext ..."
+      # 使用 tar 保持目录结构上传到远程 extensions
+      # 插件的安装与启用逻辑已移至容器启动脚本 start-gateway.sh 中自动执行
+      tar -C "extensions" -cz "$ext" | ssh "$REMOTE_HOST" "tar -C ${DEPLOY_DIR}/myextensions -xz"
+    else
+      echo "   ⚠️ 警告: 找不到本地扩展目录 extensions/$ext，跳过。"
+    fi
+  done
+else
+  echo "   -> guidance 已作为 bundled 插件随镜像构建，无需额外同步。"
+fi
 
 echo ""
 echo "🎉 部署完成！"

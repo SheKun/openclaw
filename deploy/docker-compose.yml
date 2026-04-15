@@ -18,6 +18,7 @@ services:
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ./start-gateway.sh:/usr/local/bin/start-gateway.sh:ro
+      - ./myextensions:/home/node/.openclaw/extensions
       - apt_archives:/var/cache/apt/archives/
       - npm_archives:/root/.npm
       - npm_archives:/home/node/.npm

@@ -1,0 +1,25 @@
+{
+  "id": "guidance",
+  "name": "Global Guidance",
+  "description": "Global guidance context engine that injects prompt additions from configured files.",
+  "version": "2026.3.28",
+  "kind": "context-engine",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "files": {
+      "label": "Guidance Files",
+      "help": "List of markdown files injected into system prompt addition"
+    }
+  }
+}

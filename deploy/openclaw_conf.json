@@ -36,7 +36,16 @@
           "defaultProvider": "litellm",
           "defaultModel": "qwen3.5-flash"
         }
+      },
+      "guidance": {
+        "enabled": true,
+        "config": {
+          "files": ["workspace-shared/AGENTS.md", "workspace-shared/TOOLS.md"]
+        }
       }
+    },
+    "slots": {
+      "contextEngine": "guidance"
     }
   },
   "skills": {
@@ -70,49 +79,49 @@
     },
     "entries": {
       "clawhub": {
-        "enabled": true
+        "enabled": false
       },
       "camsnap": {
-        "enabled": true
+        "enabled": false
       },
       "video-frames": {
-        "enabled": true
+        "enabled": false
       },
       "session-logs": {
-        "enabled": true
+        "enabled": false
       },
       "mcporter": {
         "enabled": true
       },
       "nano-pdf": {
-        "enabled": true
+        "enabled": false
       },
       "himalaya": {
-        "enabled": true
+        "enabled": false
       },
       "goplaces": {
-        "enabled": true
+        "enabled": false
       },
       "github": {
-        "enabled": true,
+        "enabled": false,
         "env": {
           "GITHUB_TOKEN": "${GITHUB_TOKEN}"
         }
       },
       "gh-issues": {
-        "enabled": true,
+        "enabled": false,
         "env": {
           "GITHUB_TOKEN": "${GITHUB_TOKEN}"
         }
       },
       "coding-agent": {
-        "enabled": true
+        "enabled": false
       },
       "blogwatcher": {
-        "enabled": true
+        "enabled": false
       },
       "discord": {
-        "enabled": true
+        "enabled": false
       },
       "keepassxc": {
         "enabled": true,
@@ -200,6 +209,7 @@
   },
   "agents": {
     "defaults": {
+      "skipBootstrap": true,
       "maxConcurrent": 4,
       "verboseDefault": "on",
       "subagents": {

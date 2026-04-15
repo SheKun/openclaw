@@ -217,6 +217,10 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/memory-lancedb/**"
+"extensions: guidance":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/guidance/**"
 "extensions: open-prose":
   - changed-files:
       - any-glob-to-any-file:
