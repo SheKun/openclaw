@@ -61,6 +61,16 @@ if [ -d "$EXTENSIONS_ROOT" ]; then
   done
 fi
 
+echo "同步所有agent的工作空间..."
+for workspace_dir in /home/node/.openclaw/workspace-*; do
+  if [ -d "$workspace_dir" ]; then
+    if [ -d "$workspace_dir/.git" ]; then
+      echo "[start-gateway]   -> 更新工作空间: $(basename "$workspace_dir") ..."
+      (cd "$workspace_dir" && git pull) > /dev/null 2>&1 || echo "[start-gateway]   -> 警告: 更新失败: $(basename "$workspace_dir")"
+    fi
+  fi
+done
+
 echo "[start-gateway] 启动 openclaw gateway ..."
 node openclaw.mjs gateway --allow-unconfigured & GATEWAY_PID=$!
 

@@ -156,14 +156,6 @@ if ! ssh "$REMOTE_HOST" "podman run --rm --network local-llm-service ${IMAGE_NAM
 fi
 echo "   => 连通性检查通过。"
 
-echo '=> 重新启动 openclaw-gateway 容器 ...'
-ssh -t "$REMOTE_HOST" "
-  export PATH=\"~/.local/bin:\$PATH\"
-  cd ${DEPLOY_DIR}
-  podman-compose down > /dev/null 2>&1 || true
-  podman-compose up -d
-"
-
 echo '=> 同步自定义插件 ...'
 CUSTOM_EXTENSIONS="guidance" # 这里可以添加更多自定义插件名称，空格分隔
 if [ -n "$CUSTOM_EXTENSIONS" ]; then
@@ -180,6 +172,15 @@ if [ -n "$CUSTOM_EXTENSIONS" ]; then
 else
   echo "   -> guidance 已作为 bundled 插件随镜像构建，无需额外同步。"
 fi
+
+echo '=> 重新启动 openclaw-gateway 容器 ...'
+ssh -t "$REMOTE_HOST" "
+  export PATH=\"~/.local/bin:\$PATH\"
+  cd ${DEPLOY_DIR}
+  podman-compose down > /dev/null 2>&1 || true
+  podman-compose up -d
+"
+
 
 echo ""
 echo "🎉 部署完成！"
