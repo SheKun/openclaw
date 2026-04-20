@@ -202,7 +202,7 @@ describe("promptCustomApiConfig", () => {
 
     const firstCall = fetchMock.mock.calls[0]?.[1] as { body?: string } | undefined;
     expect(firstCall?.body).toBeDefined();
-    expect(JSON.parse(firstCall?.body ?? "{}")).toMatchObject({ max_tokens: 1 });
+    expect(JSON.parse(firstCall?.body ?? "{}")).toMatchObject({ max_tokens: 16 });
   });
 
   it("uses azure responses-specific headers and body for openai verification probes", async () => {
@@ -259,7 +259,7 @@ describe("promptCustomApiConfig", () => {
     expect(body).toEqual({
       model: "deepseek-v3-0324",
       messages: [{ role: "user", content: "Hi" }],
-      max_tokens: 1,
+      max_tokens: 16,
       stream: false,
     });
   });
@@ -482,7 +482,7 @@ describe("applyCustomApiConfig", () => {
     const provider = result.config.models?.providers?.[providerId];
 
     expect(provider?.baseUrl).toBe("https://user123-resource.openai.azure.com/openai/v1");
-    expect(provider?.api).toBe("openai-responses");
+    expect(provider?.api).toBe("azure-openai-responses");
     expect(provider?.authHeader).toBe(false);
     expect(provider?.headers).toEqual({ "api-key": "abcd1234" });
 
@@ -568,7 +568,7 @@ describe("applyCustomApiConfig", () => {
     expect(result.providerIdRenamedFrom).toBeUndefined();
     const provider = result.config.models?.providers?.[oldProviderId];
     expect(provider?.baseUrl).toBe("https://my-resource.openai.azure.com/openai/v1");
-    expect(provider?.api).toBe("openai-responses");
+    expect(provider?.api).toBe("azure-openai-responses");
     expect(provider?.authHeader).toBe(false);
     expect(provider?.headers).toEqual({ "api-key": "key789" });
   });

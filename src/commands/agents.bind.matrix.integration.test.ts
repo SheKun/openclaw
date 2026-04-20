@@ -5,13 +5,12 @@ import {
   createTestRegistry,
 } from "../test-utils/channel-plugins.js";
 import {
-  loadFreshAgentsCommandModuleForTest,
+  loadFreshAgentsBindCommandModuleForTest,
   readConfigFileSnapshotMock,
   resetAgentsBindTestHarness,
   runtime,
   writeConfigFileMock,
 } from "./agents.bind.test-support.js";
-import { setDefaultChannelPluginRegistryForTests } from "./channel-test-helpers.js";
 import { baseConfigSnapshot } from "./test-runtime-config-helpers.js";
 
 const matrixBindingPlugin = createBindingResolverTestPlugin({
@@ -26,11 +25,11 @@ const matrixBindingPlugin = createBindingResolverTestPlugin({
   },
 });
 
-let agentsBindCommand: typeof import("./agents.js").agentsBindCommand;
+let agentsBindCommand: typeof import("./agents.commands.bind.js").agentsBindCommand;
 
 describe("agents bind matrix integration", () => {
   beforeEach(async () => {
-    ({ agentsBindCommand } = await loadFreshAgentsCommandModuleForTest());
+    ({ agentsBindCommand } = await loadFreshAgentsBindCommandModuleForTest());
     resetAgentsBindTestHarness();
 
     setActivePluginRegistry(
@@ -39,7 +38,7 @@ describe("agents bind matrix integration", () => {
   });
 
   afterEach(() => {
-    setDefaultChannelPluginRegistryForTests();
+    setActivePluginRegistry(createTestRegistry());
   });
 
   it("uses matrix plugin binding resolver when accountId is omitted", async () => {

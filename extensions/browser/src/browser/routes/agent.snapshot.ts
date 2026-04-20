@@ -37,6 +37,7 @@ import {
   shouldUsePlaywrightForAriaSnapshot,
   shouldUsePlaywrightForScreenshot,
 } from "./agent.snapshot.plan.js";
+import { EXISTING_SESSION_LIMITS } from "./existing-session-limits.js";
 import type { BrowserResponse, BrowserRouteRegistrar } from "./types.js";
 import { jsonError, toBoolean, toNumber, toStringOrEmpty } from "./utils.js";
 
@@ -272,11 +273,7 @@ export function registerBrowserAgentSnapshotRoutes(
       return;
     }
     if (getBrowserProfileCapabilities(profileCtx.profile).usesChromeMcp) {
-      return jsonError(
-        res,
-        501,
-        "pdf is not supported for existing-session profiles yet; use screenshot/snapshot instead.",
-      );
+      return jsonError(res, 501, EXISTING_SESSION_LIMITS.snapshot.pdfUnsupported);
     }
     await withPlaywrightRouteContext({
       req,
@@ -320,12 +317,15 @@ export function registerBrowserAgentSnapshotRoutes(
       targetId,
       run: async ({ profileCtx, tab, cdpUrl }) => {
         if (getBrowserProfileCapabilities(profileCtx.profile).usesChromeMcp) {
+          const ssrfPolicyOpts = withBrowserNavigationPolicy(ctx.state().resolved.ssrfPolicy);
           if (element) {
-            return jsonError(
-              res,
-              400,
-              "element screenshots are not supported for existing-session profiles; use ref from snapshot.",
-            );
+            return jsonError(res, 400, EXISTING_SESSION_LIMITS.snapshot.screenshotElement);
+          }
+          if (ssrfPolicyOpts.ssrfPolicy) {
+            await assertBrowserNavigationResultAllowed({
+              url: tab.url,
+              ...ssrfPolicyOpts,
+            });
           }
           const buffer = await takeChromeMcpScreenshot({
             profileName: profileCtx.profile.name,
@@ -405,12 +405,15 @@ export function registerBrowserAgentSnapshotRoutes(
         return jsonError(res, 400, "labels/mode=efficient require format=ai");
       }
       if (getBrowserProfileCapabilities(profileCtx.profile).usesChromeMcp) {
+        const ssrfPolicyOpts = withBrowserNavigationPolicy(ctx.state().resolved.ssrfPolicy);
         if (plan.selectorValue || plan.frameSelectorValue) {
-          return jsonError(
-            res,
-            400,
-            "selector/frame snapshots are not supported for existing-session profiles; snapshot the whole page and use refs.",
-          );
+          return jsonError(res, 400, EXISTING_SESSION_LIMITS.snapshot.snapshotSelector);
+        }
+        if (ssrfPolicyOpts.ssrfPolicy) {
+          await assertBrowserNavigationResultAllowed({
+            url: tab.url,
+            ...ssrfPolicyOpts,
+          });
         }
         const snapshot = await takeChromeMcpSnapshot({
           profileName: profileCtx.profile.name,
@@ -500,6 +503,7 @@ export function registerBrowserAgentSnapshotRoutes(
           selector: plan.selectorValue,
           frameSelector: plan.frameSelectorValue,
           refsMode: plan.refsMode,
+          ssrfPolicy: ctx.state().resolved.ssrfPolicy,
           options: {
             interactive: plan.interactive ?? undefined,
             compact: plan.compact ?? undefined,
@@ -513,6 +517,7 @@ export function registerBrowserAgentSnapshotRoutes(
               .snapshotAiViaPlaywright({
                 cdpUrl: profileCtx.profile.cdpUrl,
                 targetId: tab.targetId,
+                ssrfPolicy: ctx.state().resolved.ssrfPolicy,
                 ...(typeof plan.resolvedMaxChars === "number"
                   ? { maxChars: plan.resolvedMaxChars }
                   : {}),
@@ -581,6 +586,7 @@ export function registerBrowserAgentSnapshotRoutes(
                 cdpUrl: profileCtx.profile.cdpUrl,
                 targetId: tab.targetId,
                 limit: plan.limit,
+                ssrfPolicy: ctx.state().resolved.ssrfPolicy,
               });
             });
           })()

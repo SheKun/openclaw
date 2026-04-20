@@ -7,6 +7,8 @@ import {
 
 const vectorToBlob = (embedding: number[]): Buffer =>
   Buffer.from(new Float32Array(embedding).buffer);
+const FTS_QUERY_TOKEN_RE = /[\p{L}\p{N}_]+/gu;
+const SHORT_CJK_TRIGRAM_RE = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\u3131-\u3163]/u;
 
 export type SearchSource = string;
 
@@ -19,6 +21,91 @@ export type SearchRowResult = {
   snippet: string;
   source: SearchSource;
 };
+
+function normalizeSearchTokens(raw: string): string[] {
+  return (
+    raw
+      .match(FTS_QUERY_TOKEN_RE)
+      ?.map((token) => token.trim().toLowerCase())
+      .filter(Boolean) ?? []
+  );
+}
+
+function scoreFallbackKeywordResult(params: {
+  query: string;
+  path: string;
+  text: string;
+  ftsScore: number;
+}): number {
+  const queryTokens = [...new Set(normalizeSearchTokens(params.query))];
+  if (queryTokens.length === 0) {
+    return params.ftsScore;
+  }
+
+  const textTokens = normalizeSearchTokens(params.text);
+  const textTokenSet = new Set(textTokens);
+  const pathLower = params.path.toLowerCase();
+  const overlap = queryTokens.filter((token) => textTokenSet.has(token)).length;
+  const uniqueQueryOverlap = overlap / Math.max(new Set(queryTokens).size, 1);
+  const density = overlap / Math.max(textTokenSet.size, 1);
+  const pathBoost = queryTokens.reduce(
+    (score, token) => score + (pathLower.includes(token) ? 0.18 : 0),
+    0,
+  );
+  const textLengthBoost = Math.min(params.text.length / 160, 0.18);
+
+  const lexicalBoost = uniqueQueryOverlap * 0.45 + density * 0.2 + pathBoost + textLengthBoost;
+  return Math.min(1, params.ftsScore + lexicalBoost);
+}
+
+function escapeLikePattern(term: string): string {
+  return term.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+}
+
+function buildMatchQueryFromTerms(terms: string[]): string | null {
+  if (terms.length === 0) {
+    return null;
+  }
+  const quoted = terms.map((term) => `"${term.replaceAll('"', "")}"`);
+  return quoted.join(" AND ");
+}
+
+function planKeywordSearch(params: {
+  query: string;
+  ftsTokenizer?: "unicode61" | "trigram";
+  buildFtsQuery: (raw: string) => string | null;
+}): { matchQuery: string | null; substringTerms: string[] } {
+  if (params.ftsTokenizer !== "trigram") {
+    return {
+      matchQuery: params.buildFtsQuery(params.query),
+      substringTerms: [],
+    };
+  }
+
+  const tokens =
+    params.query
+      .match(FTS_QUERY_TOKEN_RE)
+      ?.map((token) => token.trim())
+      .filter(Boolean) ?? [];
+  if (tokens.length === 0) {
+    return { matchQuery: null, substringTerms: [] };
+  }
+
+  const matchTerms: string[] = [];
+  const substringTerms: string[] = [];
+  for (const token of tokens) {
+    if (SHORT_CJK_TRIGRAM_RE.test(token) && Array.from(token).length < 3) {
+      substringTerms.push(token);
+      continue;
+    }
+    matchTerms.push(token);
+  }
+
+  return {
+    matchQuery: buildMatchQueryFromTerms(matchTerms),
+    substringTerms,
+  };
+}
 
 export async function searchVector(params: {
   db: DatabaseSync;
@@ -141,34 +228,53 @@ export async function searchKeyword(params: {
   ftsTable: string;
   providerModel: string | undefined;
   query: string;
+  ftsTokenizer?: "unicode61" | "trigram";
   limit: number;
   snippetMaxChars: number;
   sourceFilter: { sql: string; params: SearchSource[] };
   buildFtsQuery: (raw: string) => string | null;
   bm25RankToScore: (rank: number) => number;
+  boostFallbackRanking?: boolean;
 }): Promise<Array<SearchRowResult & { textScore: number }>> {
   if (params.limit <= 0) {
     return [];
   }
-  const ftsQuery = params.buildFtsQuery(params.query);
-  if (!ftsQuery) {
+  const plan = planKeywordSearch({
+    query: params.query,
+    ftsTokenizer: params.ftsTokenizer,
+    buildFtsQuery: params.buildFtsQuery,
+  });
+  if (!plan.matchQuery && plan.substringTerms.length === 0) {
     return [];
   }
 
   // When providerModel is undefined (FTS-only mode), search all models
   const modelClause = params.providerModel ? " AND model = ?" : "";
   const modelParams = params.providerModel ? [params.providerModel] : [];
+  const substringClause = plan.substringTerms.map(() => " AND text LIKE ? ESCAPE '\\'").join("");
+  const substringParams = plan.substringTerms.map((term) => `%${escapeLikePattern(term)}%`);
+  const whereClause = plan.matchQuery
+    ? `${params.ftsTable} MATCH ?${substringClause}${modelClause}${params.sourceFilter.sql}`
+    : `1=1${substringClause}${modelClause}${params.sourceFilter.sql}`;
+  const queryParams = [
+    ...(plan.matchQuery ? [plan.matchQuery] : []),
+    ...substringParams,
+    ...modelParams,
+    ...params.sourceFilter.params,
+    params.limit,
+  ];
+  const rankExpression = plan.matchQuery ? `bm25(${params.ftsTable})` : "0";
 
   const rows = params.db
     .prepare(
       `SELECT id, path, source, start_line, end_line, text,\n` +
-        `       bm25(${params.ftsTable}) AS rank\n` +
+        `       ${rankExpression} AS rank\n` +
         `  FROM ${params.ftsTable}\n` +
-        ` WHERE ${params.ftsTable} MATCH ?${modelClause}${params.sourceFilter.sql}\n` +
+        ` WHERE ${whereClause}\n` +
         ` ORDER BY rank ASC\n` +
         ` LIMIT ?`,
     )
-    .all(ftsQuery, ...modelParams, ...params.sourceFilter.params, params.limit) as Array<{
+    .all(...queryParams) as Array<{
     id: string;
     path: string;
     source: SearchSource;
@@ -179,13 +285,21 @@ export async function searchKeyword(params: {
   }>;
 
   return rows.map((row) => {
-    const textScore = params.bm25RankToScore(row.rank);
+    const textScore = plan.matchQuery ? params.bm25RankToScore(row.rank) : 1;
+    const score = params.boostFallbackRanking
+      ? scoreFallbackKeywordResult({
+          query: params.query,
+          path: row.path,
+          text: row.text,
+          ftsScore: textScore,
+        })
+      : textScore;
     return {
       id: row.id,
       path: row.path,
       startLine: row.start_line,
       endLine: row.end_line,
-      score: textScore,
+      score,
       textScore,
       snippet: truncateUtf16Safe(row.text, params.snippetMaxChars),
       source: row.source,
