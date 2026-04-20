@@ -40,7 +40,12 @@
       "guidance": {
         "enabled": true,
         "config": {
-          "files": ["workspace-shared/AGENTS.md", "workspace-shared/TOOLS.md"]
+          "files": [
+            "workspace-shared/AGENTS.md",
+            "workspace-shared/TOOLS.md",
+            "workspace-shared/SOUL.md",
+            "workspace-shared/USER.md"
+          ]
         }
       }
     },
@@ -210,9 +215,11 @@
   "agents": {
     "defaults": {
       "skipBootstrap": true,
+      "timeoutSeconds": 3600,
       "maxConcurrent": 4,
       "verboseDefault": "on",
       "subagents": {
+        "runTimeoutSeconds": 1800,
         "maxConcurrent": 8,
         "maxChildrenPerAgent": 4,
         "maxSpawnDepth": 1
