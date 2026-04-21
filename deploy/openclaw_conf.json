@@ -55,22 +55,16 @@
   },
   "skills": {
     "allowBundled": [
+      "healthcheck",
+      "node-connect",
+      "session-logs",
+
       "clawhub",
       "skill-creator",
-      "camsnap",
-      "video-frames",
-      "session-logs",
-      "node-connect",
       "mcporter",
-      "healthcheck",
-      "nano-pdf",
-      "himalaya",
-      "goplaces",
-      "github",
-      "gh-issues",
-      "coding-agent",
-      "blogwatcher",
-      "discord",
+
+      "taskflow",
+
       "weather"
     ],
     "load": {
@@ -83,51 +77,6 @@
       "nodeManager": "npm"
     },
     "entries": {
-      "clawhub": {
-        "enabled": false
-      },
-      "camsnap": {
-        "enabled": false
-      },
-      "video-frames": {
-        "enabled": false
-      },
-      "session-logs": {
-        "enabled": false
-      },
-      "mcporter": {
-        "enabled": true
-      },
-      "nano-pdf": {
-        "enabled": false
-      },
-      "himalaya": {
-        "enabled": false
-      },
-      "goplaces": {
-        "enabled": false
-      },
-      "github": {
-        "enabled": false,
-        "env": {
-          "GITHUB_TOKEN": "${GITHUB_TOKEN}"
-        }
-      },
-      "gh-issues": {
-        "enabled": false,
-        "env": {
-          "GITHUB_TOKEN": "${GITHUB_TOKEN}"
-        }
-      },
-      "coding-agent": {
-        "enabled": false
-      },
-      "blogwatcher": {
-        "enabled": false
-      },
-      "discord": {
-        "enabled": false
-      },
       "keepassxc": {
         "enabled": true,
         "env": {

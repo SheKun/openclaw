@@ -28,7 +28,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202604151534"
+VERSION="${OPENCLAW_VERSION}-build202604211218"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 
 REMOTE_HOST="${1:-rmbook}"
@@ -40,12 +40,15 @@ if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
 else
   echo "镜像 ${IMAGE_NAME} 不存在，开始按照文档步骤本地构造 OpenClaw 镜像 (docker build) ..."
   # 关闭 provenance 来源证明生成，彻底解决较老版本 podman 3.4 导入 tar 包后 tag 变成 localhost 的问题
-  docker build --provenance=false \
+  # 使用 --progress=plain 保存完整构建日志，便于事后排查缓存失效。
+  BUILD_LOG="/tmp/openclaw-build-${IMAGE_NAME//[\/:]/_}.log"
+  echo "=> 构建日志将保存至: ${BUILD_LOG}"
+  docker build --progress=plain --provenance=false \
     --build-arg "OPENCLAW_INSTALL_BROWSER=1" \
-    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest @clawdbot/lobster@latest" \
     --build-arg "OPENCLAW_EXTENSIONS=feishu llm-task lobster" \
-    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=xauth keepassxc" \
-    -t "${IMAGE_NAME}" -f Dockerfile .
+    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest @clawdbot/lobster@latest clawhub mcporter" \
+    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=keepassxc jq ripgrep" \
+    -t "${IMAGE_NAME}" -f Dockerfile . 2>&1 | tee "${BUILD_LOG}"
 fi
 
 echo "2. 将镜像导入 ${REMOTE_HOST} (podman save & load) ..."
@@ -122,7 +125,6 @@ FEISHU_APP_ID_PLANNER=${FEISHU_APP_ID_PLANNER:-}
 FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
 LITELLM_API_KEY=${LITELLM_API_KEY:-}
 PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
-GITHUB_TOKEN=${GITHUB_TOKEN:-}
 AGENT_SECRET_DB_PASSWORD=${AGENT_SECRET_DB_PASSWORD:-}
 EOF"
 
