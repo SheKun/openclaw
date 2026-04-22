@@ -28,11 +28,36 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202604211218"
+VERSION="${OPENCLAW_VERSION}-build202604211440"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 
 REMOTE_HOST="${1:-rmbook}"
 DEPLOY_DIR="~/openclaw-deploy"
+
+CONFIG_JSON_PATH="${SCRIPT_DIR}/openclaw_conf.json"
+if [ ! -f "$CONFIG_JSON_PATH" ]; then
+  echo "错误: 未找到配置文件 (${CONFIG_JSON_PATH})"
+  exit 1
+fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "错误: 需要 node 命令来解析默认 agent，请先安装 Node.js。"
+  exit 1
+fi
+
+DEFAULT_AGENT_ID=$(node -e '
+const fs = require("node:fs");
+const cfgPath = process.argv[1];
+const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+const list = Array.isArray(cfg?.agents?.list) ? cfg.agents.list : [];
+const defaultAgent = list.find((entry) => entry && entry.default === true);
+const fallbackAgent = list[0];
+const id = (defaultAgent?.id || fallbackAgent?.id || "main").toString().trim();
+process.stdout.write(id || "main");
+' "$CONFIG_JSON_PATH")
+
+DEFAULT_AGENT_DIR="~/.openclaw/agents/${DEFAULT_AGENT_ID}/agent"
+echo "=> 从配置解析默认 Agent: ${DEFAULT_AGENT_ID}"
+echo "=> 将设置 OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}"
 
 echo "1. 检查是否存在镜像 ${IMAGE_NAME} ..."
 if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
@@ -46,7 +71,7 @@ else
   docker build --progress=plain --provenance=false \
     --build-arg "OPENCLAW_INSTALL_BROWSER=1" \
     --build-arg "OPENCLAW_EXTENSIONS=feishu llm-task lobster" \
-    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest @clawdbot/lobster@latest clawhub mcporter" \
+    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest @clawdbot/lobster@latest clawhub" \
     --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=keepassxc jq ripgrep" \
     -t "${IMAGE_NAME}" -f Dockerfile . 2>&1 | tee "${BUILD_LOG}"
 fi
@@ -117,6 +142,8 @@ ssh "$REMOTE_HOST" "cat <<EOF > ${DEPLOY_DIR}/.env
 OPENCLAW_IMAGE=${IMAGE_NAME}
 OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
 OPENCLAW_CONFIG_DIR=~/.openclaw
+OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}
+PI_CODING_AGENT_DIR=${DEFAULT_AGENT_DIR}
 FEISHU_APP_ID_STEWARD=${FEISHU_APP_ID_STEWARD:-}
 FEISHU_APP_SECRET_STEWARD=${FEISHU_APP_SECRET_STEWARD:-}
 FEISHU_APP_ID_CODER=${FEISHU_APP_ID_CODER:-}

@@ -29,6 +29,9 @@
       "lobster": {
         "enabled": true
       },
+      "open-prose": {
+        "enabled": true
+      },
       "llm-task": {
         "enabled": true,
         "config": {
@@ -61,8 +64,6 @@
 
       "clawhub",
       "skill-creator",
-      "mcporter",
-
       "taskflow",
 
       "weather"
@@ -195,6 +196,7 @@
         "default": true,
         "name": "Adam",
         "workspace": "~/.openclaw/workspace-steward",
+        "agentDir": "~/.openclaw/agents/steward/agent",
         "model": "litellm/qwen3.5-plus",
         "reasoningDefault": "on",
         "subagents": {
@@ -209,6 +211,7 @@
         "id": "coder",
         "name": "Ape",
         "workspace": "~/.openclaw/workspace-coder",
+        "agentDir": "~/.openclaw/agents/coder/agent",
         "model": "litellm/kimi-k2.5",
         "subagents": {
           "allowAgents": []
@@ -222,6 +225,7 @@
         "id": "planner",
         "name": "Fox",
         "workspace": "~/.openclaw/workspace-planner",
+        "agentDir": "~/.openclaw/agents/planner/agent",
         "model": "litellm/qwen3-max",
         "subagents": {
           "allowAgents": []
