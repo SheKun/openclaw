@@ -41,7 +41,7 @@ function createOpenedFileResult(content: string, realPath: string) {
 describe("guidance context engine plugin", () => {
   it("registers a context engine named 'guidance'", async () => {
     mockOpenFileWithinRoot.mockReset();
-    let registeredEngine: ContextEngineFactory | undefined;
+    let registeredEngine: ContextEngineFactory;
     const api = buildPluginApi({
       id: "test",
       name: "test",
@@ -81,7 +81,7 @@ describe("guidance context engine plugin", () => {
       throw new Error("File not found");
     });
 
-    let registeredFactory: ContextEngineFactory | undefined;
+    let registeredFactory: ContextEngineFactory;
     const api = buildPluginApi({
       id: "test",
       name: "test",
@@ -126,7 +126,7 @@ describe("guidance context engine plugin", () => {
       throw new Error("File not found");
     });
 
-    let registeredFactory: ContextEngineFactory | undefined;
+    let registeredFactory: ContextEngineFactory;
     const api = buildPluginApi({
       id: "test",
       name: "test",
@@ -171,7 +171,7 @@ describe("guidance context engine plugin", () => {
       throw new Error("File not found");
     });
 
-    let registeredFactory: ContextEngineFactory | undefined;
+    let registeredFactory: ContextEngineFactory;
     const api = buildPluginApi({
       id: "test",
       name: "test",
@@ -210,7 +210,7 @@ describe("guidance context engine plugin", () => {
     mockOpenFileWithinRoot.mockReset();
     mockOpenFileWithinRoot.mockRejectedValueOnce(new Error("file is outside workspace root"));
 
-    let registeredFactory: ContextEngineFactory | undefined;
+    let registeredFactory: ContextEngineFactory;
     const logger = createMockLogger();
     const blockedPath = "/etc/passwd";
     const api = buildPluginApi({

@@ -52,7 +52,7 @@ export default definePluginEntry({
       },
 
       async assemble({ messages }) {
-        const config = api.pluginConfig as GuidanceConfig | undefined;
+        const config = api.pluginConfig as GuidanceConfig;
         const guidanceFiles = config?.files ?? [];
         let systemPromptAddition = "";
 

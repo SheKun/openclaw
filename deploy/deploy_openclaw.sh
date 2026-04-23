@@ -28,7 +28,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202604211440"
+VERSION="${OPENCLAW_VERSION}-build202604230912"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 
 REMOTE_HOST="${1:-rmbook}"
@@ -186,20 +186,23 @@ fi
 echo "   => 连通性检查通过。"
 
 echo '=> 同步自定义插件 ...'
+CUSTOM_EXTENSIONS_DIR="${SCRIPT_DIR}/myextensions"
 CUSTOM_EXTENSIONS="guidance" # 这里可以添加更多自定义插件名称，空格分隔
 if [ -n "$CUSTOM_EXTENSIONS" ]; then
+  ssh "$REMOTE_HOST" "mkdir -p ${DEPLOY_DIR}/myextensions && find ${DEPLOY_DIR}/myextensions -mindepth 1 -maxdepth 1 -exec rm -rf {} +"
+  echo "   -> 已清空远程目录 ${DEPLOY_DIR}/myextensions 中的现有插件。"
   for ext in $CUSTOM_EXTENSIONS; do
-    if [ -d "extensions/$ext" ]; then
+    if [ -d "${CUSTOM_EXTENSIONS_DIR}/$ext" ]; then
       echo "   -> 正在同步扩展: $ext ..."
       # 使用 tar 保持目录结构上传到远程 extensions
       # 插件的安装与启用逻辑已移至容器启动脚本 start-gateway.sh 中自动执行
-      tar -C "extensions" -cz "$ext" | ssh "$REMOTE_HOST" "tar -C ${DEPLOY_DIR}/myextensions -xz"
+      tar -C "${CUSTOM_EXTENSIONS_DIR}" -cz "$ext" | ssh "$REMOTE_HOST" "tar -C ${DEPLOY_DIR}/myextensions -xz"
     else
-      echo "   ⚠️ 警告: 找不到本地扩展目录 extensions/$ext，跳过。"
+      echo "   ⚠️ 警告: 找不到本地扩展目录 ${CUSTOM_EXTENSIONS_DIR}/$ext，跳过。"
     fi
   done
 else
-  echo "   -> guidance 已作为 bundled 插件随镜像构建，无需额外同步。"
+  echo "   -> 未配置自定义插件同步。"
 fi
 
 echo '=> 重新启动 openclaw-gateway 容器 ...'

@@ -19,10 +19,8 @@
     "backend": "qmd"
   },
   "plugins": {
+    "allow": ["browser", "feishu", "lobster", "open-prose", "llm-task", "guidance"],
     "entries": {
-      "browser": {
-        "enabled": true
-      },
       "feishu": {
         "enabled": true
       },
@@ -41,7 +39,6 @@
         }
       },
       "guidance": {
-        "enabled": true,
         "config": {
           "files": [
             "workspace-shared/AGENTS.md",
@@ -53,7 +50,7 @@
       }
     },
     "slots": {
-      "contextEngine": "guidance"
+      "contextEngine": "public-guidance"
     }
   },
   "skills": {
@@ -188,7 +185,8 @@
           "systemPrompt": "This chat is about to end. Summarize them in a few words and write them down."
         }
       },
-      "elevatedDefault": "full"
+      "elevatedDefault": "full",
+      "skills": []
     },
     "list": [
       {
@@ -205,7 +203,19 @@
         "tools": {
           "profile": "full",
           "alsoAllow": ["lobster", "llm-task"]
-        }
+        },
+        "skills": [
+          "clawhub",
+          "skill-creator",
+          "skill-vetter",
+          "prose",
+          "taskflow",
+          "healthcheck",
+          "node-connect",
+          "keepassxc",
+          "session-logs",
+          "weather"
+        ]
       },
       {
         "id": "coder",
@@ -217,23 +227,23 @@
           "allowAgents": []
         },
         "tools": {
-          "profile": "coding",
-          "deny": ["browser"]
-        }
+          "profile": "coding"
+        },
+        "skills": []
       },
       {
         "id": "planner",
         "name": "Fox",
         "workspace": "~/.openclaw/workspace-planner",
         "agentDir": "~/.openclaw/agents/planner/agent",
-        "model": "litellm/qwen3-max",
+        "model": "litellm/qwen3.5-flash",
         "subagents": {
           "allowAgents": []
         },
         "tools": {
-          "profile": "full",
-          "deny": ["browser"]
-        }
+          "profile": "full"
+        },
+        "skills": ["ctrip-travel-search"]
       }
     ]
   },
