@@ -1,0 +1,1 @@
+ssh coder-copilot "acpx '$@'"

@@ -19,7 +19,7 @@
     "backend": "qmd"
   },
   "plugins": {
-    "allow": ["browser", "feishu", "lobster", "open-prose", "llm-task", "guidance"],
+    "allow": ["browser", "feishu", "lobster", "open-prose", "llm-task", "guidance", "acpx"],
     "entries": {
       "feishu": {
         "enabled": true
@@ -33,9 +33,28 @@
       "llm-task": {
         "enabled": true,
         "config": {
-          "allowedModels": ["litellm/qwen3.5-flash"],
+          "allowedModels": ["litellm/qwen3.6-flash"],
           "defaultProvider": "litellm",
-          "defaultModel": "qwen3.5-flash"
+          "defaultModel": "qwen3.6-flash"
+        }
+      },
+      "acpx": {
+        "enabled": true,
+        "config": {
+          "agents": {
+            "copilot": {
+              "command": "/usr/local/bin/custom_acpx.sh"
+            }
+          }
+        }
+      },
+      "perplexity": {
+        "enabled": true,
+        "config": {
+          "webSearch": {
+            "baseUrl": "http://litellm-gateway:8081/v1",
+            "model": "qwen3.6-flash-search"
+          }
         }
       },
       "guidance": {
@@ -90,11 +109,7 @@
     "web": {
       "search": {
         "enabled": true,
-        "provider": "perplexity",
-        "perplexity": {
-          "baseUrl": "http://litellm-gateway:8081/v1",
-          "model": "qwen3.5-flash-search"
-        }
+        "provider": "perplexity"
       }
     },
     "elevated": {
@@ -111,6 +126,21 @@
       "host": "gateway",
       "security": "full",
       "ask": "off"
+    }
+  },
+  "acp": {
+    "enabled": true,
+    "dispatch": { "enabled": true },
+    "backend": "acpx",
+    "defaultAgent": "copilot",
+    "allowedAgents": ["copilot"],
+    "maxConcurrentSessions": 8,
+    "stream": {
+      "coalesceIdleMs": 300,
+      "maxChunkChars": 1200
+    },
+    "runtime": {
+      "ttlMinutes": 120
     }
   },
   "commands": {
@@ -177,7 +207,7 @@
       },
       "compaction": {
         "reserveTokensFloor": 20000,
-        "model": "litellm/qwen3.5-plus",
+        "model": "litellm/qwen3.6-plus",
         "memoryFlush": {
           "enabled": true,
           "softThresholdTokens": 10000,
@@ -195,7 +225,7 @@
         "name": "Adam",
         "workspace": "~/.openclaw/workspace-steward",
         "agentDir": "~/.openclaw/agents/steward/agent",
-        "model": "litellm/qwen3.5-plus",
+        "model": "litellm/qwen3.6-plus",
         "reasoningDefault": "on",
         "subagents": {
           "allowAgents": ["*"]
@@ -236,7 +266,7 @@
         "name": "Fox",
         "workspace": "~/.openclaw/workspace-planner",
         "agentDir": "~/.openclaw/agents/planner/agent",
-        "model": "litellm/qwen3.5-flash",
+        "model": "litellm/qwen3.6-flash",
         "subagents": {
           "allowAgents": []
         },
@@ -323,26 +353,18 @@
             "maxTokens": 32768
           },
           {
-            "id": "qwen3.5-plus",
-            "name": "Qwen3.5 Plus",
+            "id": "qwen3.6-plus",
+            "name": "qwen3.6 Plus",
             "reasoning": true,
             "input": ["text", "image"],
             "contextWindow": 1000000,
             "maxTokens": 65536
           },
           {
-            "id": "qwen3.5-flash",
-            "name": "Qwen3.5 Flash",
+            "id": "qwen3.6-flash",
+            "name": "qwen3.6 Flash",
             "reasoning": true,
             "input": ["text", "image"],
-            "contextWindow": 1000000,
-            "maxTokens": 65536
-          },
-          {
-            "id": "qwen3-coder-plus",
-            "name": "Qwen3 Coder Plus",
-            "reasoning": true,
-            "input": ["text"],
             "contextWindow": 1000000,
             "maxTokens": 65536
           },

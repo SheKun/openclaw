@@ -1,0 +1,58 @@
+# OpenClaw SSH Server Configuration
+# Security-hardened for key-based authentication only
+
+# Listening configuration
+Port 22
+AddressFamily any
+ListenAddress 0.0.0.0
+ListenAddress ::
+
+# Authentication
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys .ssh/authorized_keys2
+PasswordAuthentication no
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+KerberosAuthentication no
+GSSAPIAuthentication no
+UsePAM yes
+
+# Root login and privilege separation
+PermitRootLogin prohibit-password
+StrictModes yes
+PermitUserEnvironment no
+
+# Security hardening
+Protocol 2
+X11Forwarding no
+X11UseLocalhost yes
+AllowAgentForwarding no
+AllowTcpForwarding no
+PermitTunnel no
+IgnoreRhosts yes
+HostbasedAuthentication no
+UseDns no
+PermitUserRC no
+
+# Session and timeout
+ClientAliveInterval 300
+ClientAliveCountMax 2
+TCPKeepAlive yes
+MaxAuthTries 3
+MaxSessions 5
+LoginGraceTime 30
+
+# Crypto and key exchange
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
+
+# Subsystem
+Subsystem sftp /usr/lib/openssh/sftp-server -f AUTHPRIV -l INFO
+
+# Logging
+SyslogFacility AUTH
+LogLevel VERBOSE

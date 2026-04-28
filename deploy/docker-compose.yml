@@ -1,11 +1,31 @@
 services:
+  coder-copilot:
+    container_name: coder-copilot
+    image: ${CODER_COPILOT_IMAGE:-coder-copilot:latest}
+    user: "root"
+    env_file:
+      - .coder_env
+    environment:
+      FINAL_USER: root
+      COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
+    volumes:
+      - ~/.coder-harness/projects:/home/coder/projects
+      - ~/.coder-harness/.ssh:/home/coder/.ssh
+      - ./coder_entry.sh:/entrypoint.sh:ro
+      - ./create_ssh_user.sh:/create_ssh_user.sh:ro
+    init: true
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+    networks:
+      - openclaw-internal
+
   openclaw-gateway:
     container_name: openclaw-gateway
     image: ${OPENCLAW_IMAGE:-openclaw:local}
     shm_size: '1gb'
     user: "root"
     env_file:
-      - .env
+      - .openclaw_env
     environment:
       HOME: /home/node
       TERM: xterm-256color
@@ -18,6 +38,7 @@ services:
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ./start-gateway.sh:/usr/local/bin/start-gateway.sh:ro
+      - ./custom_acpx.sh:/usr/local/bin/custom_acpx.sh:ro
       - ./myextensions:/home/node/.openclaw/extensions
       - apt_archives:/var/cache/apt/archives/
       - npm_archives:/root/.npm
@@ -39,6 +60,9 @@ services:
       - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
     init: true
     restart: unless-stopped
+    depends_on:
+      coder-copilot:
+        condition: service_started
     command: ["sh", "/usr/local/bin/start-gateway.sh"]
     healthcheck:
       test:
@@ -54,6 +78,7 @@ services:
       start_period: 20s
     networks:
       - local-llm-service
+      - openclaw-internal
 
   openclaw-cli:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
@@ -76,8 +101,6 @@ services:
       TZ: ${OPENCLAW_TZ:-UTC}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
-    stdin_open: true
-    tty: true
     init: true
     entrypoint: ["node", "dist/index.js"]
     depends_on:
@@ -86,6 +109,8 @@ services:
 networks:
   local-llm-service:
     external: true
+  openclaw-internal:
+    driver: bridge
 
 volumes:
   apt_archives:

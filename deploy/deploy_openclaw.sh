@@ -8,6 +8,7 @@ set -euo pipefail
 # 获取脚本所在目录并切换到项目根目录，以确保相对路径执行正确
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}/.."
+COPILOT_HARNESS_DIR="${SCRIPT_DIR}/coding_harness/copilot"
 cd "${PROJECT_ROOT}" || exit 1
 
 # 加载环境变量
@@ -30,6 +31,21 @@ if [ -z "$OPENCLAW_VERSION" ]; then
 fi
 VERSION="${OPENCLAW_VERSION}-build202604230912"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
+COPILOT_HARNESS_BASE_IMAGE="${COPILOT_HARNESS_BASE_IMAGE:-node:22-bookworm-slim}"
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "错误: 需要 npm 命令来查询 Copilot 最新版本，请先安装 npm。"
+  exit 1
+fi
+
+COPILOT_VERSION=$(npm view @github/copilot version 2>/dev/null | tr -d '[:space:]')
+if [ -z "$COPILOT_VERSION" ]; then
+  echo "错误: 无法获取 @github/copilot 的最新版本号。"
+  exit 1
+fi
+CODER_COPILOT_IMAGE="krepus.com/coder-copilot:${COPILOT_VERSION}"
+echo "=> 检测到最新 Copilot CLI 版本: ${COPILOT_VERSION}"
+echo "=> 将构建并部署 Harness 镜像: ${CODER_COPILOT_IMAGE}"
 
 REMOTE_HOST="${1:-rmbook}"
 DEPLOY_DIR="~/openclaw-deploy"
@@ -76,7 +92,19 @@ else
     -t "${IMAGE_NAME}" -f Dockerfile . 2>&1 | tee "${BUILD_LOG}"
 fi
 
-echo "2. 将镜像导入 ${REMOTE_HOST} (podman save & load) ..."
+echo "2. 检查是否存在镜像 ${CODER_COPILOT_IMAGE} ..."
+if docker image inspect "${CODER_COPILOT_IMAGE}" >/dev/null 2>&1; then
+  echo "镜像 ${CODER_COPILOT_IMAGE} 已存在，跳过本地构建。"
+else
+  echo "镜像 ${CODER_COPILOT_IMAGE} 不存在，开始构建 Copilot Harness 镜像 ..."
+  docker build --provenance=false \
+    --build-arg "BASE_IMAGE=${COPILOT_HARNESS_BASE_IMAGE}" \
+    --build-arg "COPILOT_VERSION=${COPILOT_VERSION}" \
+    -t "${CODER_COPILOT_IMAGE}" \
+    -f "${COPILOT_HARNESS_DIR}/Dockerfile" "${COPILOT_HARNESS_DIR}"
+fi
+
+echo "3. 将镜像导入 ${REMOTE_HOST} (podman save & load) ..."
 if ssh "$REMOTE_HOST" "podman image inspect ${IMAGE_NAME} >/dev/null 2>&1"; then
   echo "远程主机 ${REMOTE_HOST} 已存在镜像 ${IMAGE_NAME}，跳过导入步骤。"
 else
@@ -84,7 +112,15 @@ else
   docker save "${IMAGE_NAME}" | ssh "$REMOTE_HOST" "podman load"
 fi
 
-echo "3. 准备部署文件 ..."
+echo "4. 将 Copilot Harness 镜像导入 ${REMOTE_HOST} (podman save & load) ..."
+if ssh "$REMOTE_HOST" "podman image inspect ${CODER_COPILOT_IMAGE} >/dev/null 2>&1"; then
+  echo "远程主机 ${REMOTE_HOST} 已存在镜像 ${CODER_COPILOT_IMAGE}，跳过导入步骤。"
+else
+  echo "远程主机缺少该镜像，将其导出并通过 ssh 的标准输入直接载入远程节点 ..."
+  docker save "${CODER_COPILOT_IMAGE}" | ssh "$REMOTE_HOST" "podman load"
+fi
+
+echo "5. 准备部署文件 ..."
 ssh "$REMOTE_HOST" "mkdir -p ${DEPLOY_DIR}"
 
 # 从 KeePass 密码库中读取密钥，生成 secret_file.json
@@ -116,12 +152,7 @@ FEISHU_APP_SECRET_CODER=$(kp_password "${FEISHU_APP_CODER_SLOT_PATH}")
 FEISHU_APP_ID_PLANNER=$(kp_username "${FEISHU_APP_PLANNER_SLOT_PATH}")
 FEISHU_APP_SECRET_PLANNER=$(kp_password "${FEISHU_APP_PLANNER_SLOT_PATH}")
 
-scp "${SCRIPT_DIR}/docker-compose.yml" "$REMOTE_HOST:${DEPLOY_DIR}/"
-scp "${SCRIPT_DIR}/openclaw_conf.json" "$REMOTE_HOST:${DEPLOY_DIR}/openclaw.json"
-scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
-scp "${SCRIPT_DIR}/create_cdp_user.sh" "$REMOTE_HOST:${DEPLOY_DIR}/create_cdp_user.sh"
-
-echo "4. 在远程服务器初始化与启动服务 ..."
+echo "6. 在远程服务器初始化与启动服务 ..."
 # 检查是否已有 .env 并提取 Gateway Token
 EXISTING_TOKEN=$(ssh "$REMOTE_HOST" "if [ -f ${DEPLOY_DIR}/.env ]; then grep '^OPENCLAW_GATEWAY_TOKEN=' ${DEPLOY_DIR}/.env | cut -d'=' -f2 | tr -d '\\\"'; fi" || true)
 
@@ -136,14 +167,71 @@ fi
 echo "=> 创建部署目录 ..."
 ssh "$REMOTE_HOST" "mkdir -p ${DEPLOY_DIR}"
 
+echo "=> 复制部署文件到远程服务器 ..."
+scp "${SCRIPT_DIR}/docker-compose.yml" "$REMOTE_HOST:${DEPLOY_DIR}/"
+scp "${SCRIPT_DIR}/openclaw_conf.json" "$REMOTE_HOST:${DEPLOY_DIR}/openclaw.json"
+scp "${SCRIPT_DIR}/coding_harness/copilot/coder_entry.sh" "$REMOTE_HOST:${DEPLOY_DIR}/coder_entry.sh"
+scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
+scp "${SCRIPT_DIR}/create_ssh_user.sh" "$REMOTE_HOST:${DEPLOY_DIR}/create_ssh_user.sh"
+scp "${SCRIPT_DIR}/coding_harness/custom_acpx.sh" "$REMOTE_HOST:${DEPLOY_DIR}/custom_acpx.sh"
+ssh "$REMOTE_HOST" "chmod +x ${DEPLOY_DIR}/*.sh"
+
+echo "=> 检查coder harness配置目录 ~/.coder-harness ..."
+ssh "$REMOTE_HOST" "
+  if [ ! -d ~/.coder-harness ]; then
+    echo '   => 创建 coder harness 配置目录 ...'
+    mkdir -p ~/.coder-harness
+    mkdir -p ~/.coder-harness/.ssh
+    mkdir -p ~/.coder-harness/projects
+  else
+    echo '   => coder harness 配置目录 ~/.coder-harness 已存在，跳过创建 ...'
+  fi
+"
+
+echo "=> 检查配置目录 ~/.openclaw ..."
+ssh "$REMOTE_HOST" "
+  if [ ! -d ~/.openclaw ]; then
+    echo '   => 创建配置目录并初始化 OpenClaw 配置 ...'
+    mkdir -p ~/.openclaw
+    mkdir -p ~/.openclaw/.ssh
+    mkdir -p ~/.openclaw/.gitconfig
+  else
+    echo '   => 配置目录 ~/.openclaw 已存在，跳过创建 ...'
+  fi
+"
+echo "=> 复制配置文件 openclaw.json 到 ~/.openclaw/openclaw.json ..."
+ssh "$REMOTE_HOST" "cp ${DEPLOY_DIR}/openclaw.json ~/.openclaw/openclaw.json"
+
+echo "=> 创建openclaw认证密钥对 ..."
+ssh "$REMOTE_HOST" "
+  if [ ! -f ~/.openclaw/.ssh/auth ]; then
+    echo '   => 生成新的认证密钥对 ...'
+    ssh-keygen -t ed25519 -f ~/.openclaw/.ssh/auth -N '' -q
+  else
+    echo '   => 认证密钥对已存在，跳过生成 ...'
+  fi
+"
+AUTH_PUB_KEY=$(ssh "$REMOTE_HOST" "cat ~/.openclaw/.ssh/auth.pub")
+
+echo "=> 创建openclaw-gateway服务访问宿主机CDP调试端口的SSH隧道账号 ..."
+AUTH_OPTIONS="restrict,port-forwarding,permitopen=\"127.0.0.1:9222\",command=\"echo Tunnel Ready. Press Ctrl+C to disconnect.; read\""
+ssh -t "$REMOTE_HOST" "
+  sudo bash ${DEPLOY_DIR}/create_ssh_user.sh \
+    --server-user cdp_tunnel \
+    --public-key '${AUTH_PUB_KEY}' \
+    --auth-options '${AUTH_OPTIONS}'
+"
+
 # 保存 .env 文件以保证 podman-compose up -d 可以持久化加载所需的环境变量
-echo "=> 生成 .env 文件 ..."
-ssh "$REMOTE_HOST" "cat <<EOF > ${DEPLOY_DIR}/.env
+echo "=> 生成 .openclaw_env 文件 ..."
+ssh "$REMOTE_HOST" "
+cat <<EOF > ${DEPLOY_DIR}/.openclaw_env
 OPENCLAW_IMAGE=${IMAGE_NAME}
-OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
+CODER_COPILOT_IMAGE=${CODER_COPILOT_IMAGE}
 OPENCLAW_CONFIG_DIR=~/.openclaw
 OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}
 PI_CODING_AGENT_DIR=${DEFAULT_AGENT_DIR}
+OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
 FEISHU_APP_ID_STEWARD=${FEISHU_APP_ID_STEWARD:-}
 FEISHU_APP_SECRET_STEWARD=${FEISHU_APP_SECRET_STEWARD:-}
 FEISHU_APP_ID_CODER=${FEISHU_APP_ID_CODER:-}
@@ -153,22 +241,16 @@ FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
 LITELLM_API_KEY=${LITELLM_API_KEY:-}
 PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
 AGENT_SECRET_DB_PASSWORD=${AGENT_SECRET_DB_PASSWORD:-}
-EOF"
-
-echo "=> 检查配置目录 ~/.openclaw ..."
-ssh "$REMOTE_HOST" "
-  if [ ! -d ~/.openclaw ]; then
-    echo '   => 创建配置目录并初始化 OpenClaw 配置 ...'
-    mkdir -p ~/.openclaw
-    mkdir -p ~/.openclaw/.ssh
-    mkdir -p ~/.openclaw/.gitconfig   
-  else
-    echo '   => 配置目录 ~/.openclaw 已存在，跳过创建 ...'
-  fi
+EOF
 "
 
-echo "=> 复制 openclaw.json 到 ~/.openclaw/openclaw.json ..."
-ssh "$REMOTE_HOST" "cp ${DEPLOY_DIR}/openclaw.json ~/.openclaw/openclaw.json"
+echo "=> 生成 .coder_env 文件 ..."
+ssh "$REMOTE_HOST" "
+cat <<EOF > ${DEPLOY_DIR}/.coder_env
+CODER_PUB_KEY='${AUTH_PUB_KEY}'
+COPILOT_GITHUB_TOKEN=${COPILOT_GITHUB_TOKEN:-}
+EOF
+"
 
 echo "=> 检查 local-llm-service 网络 ..."
 if ! ssh "$REMOTE_HOST" "podman network inspect local-llm-service >/dev/null 2>&1"; then
@@ -195,7 +277,6 @@ if [ -n "$CUSTOM_EXTENSIONS" ]; then
     if [ -d "${CUSTOM_EXTENSIONS_DIR}/$ext" ]; then
       echo "   -> 正在同步扩展: $ext ..."
       # 使用 tar 保持目录结构上传到远程 extensions
-      # 插件的安装与启用逻辑已移至容器启动脚本 start-gateway.sh 中自动执行
       tar -C "${CUSTOM_EXTENSIONS_DIR}" -cz "$ext" | ssh "$REMOTE_HOST" "tar -C ${DEPLOY_DIR}/myextensions -xz"
     else
       echo "   ⚠️ 警告: 找不到本地扩展目录 ${CUSTOM_EXTENSIONS_DIR}/$ext，跳过。"
@@ -248,7 +329,10 @@ echo "如需查看网关运行日志，可执行："
 echo "   podman-compose logs -f openclaw-gateway"
 echo ""
 echo "▶ 4. 建立 CDP 浏览器隧道 (可选)"
-echo "如果你希望在宿主机上运行 Chrome 浏览器并让容器访问，请在服务器上执行一次初始化脚本："
-echo "   sudo bash ${DEPLOY_DIR}/create_cdp_user.sh"
+echo "如果你希望在宿主机上运行 Chrome 浏览器并让容器访问，请在服务器上运行："
+echo "   google-chrome --remote-debugging-port=9222" 
+echo "                 --user-data-dir=/tmp/openclaw-chrome"
+echo "                 --rremote-allow-origins=\"*\""
+echo "                 --log-level=3"
 echo "该脚本会创建隧道账号 cdp_tunnel 并自动配置 SSH 密钥，容器重启后会自动建立隧道。"
 echo "----------------------------------------------------"
