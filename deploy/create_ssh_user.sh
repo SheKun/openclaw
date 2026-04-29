@@ -103,37 +103,31 @@ else
     TARGET_SHELL="$(resolve_login_shell)"
 fi
 
+echo "=> 创建用户 ..."
 ensure_user() {
     local current_user
     current_user=$(id -un)
-
-    if id "$SERVER_USER" >/dev/null 2>&1; then
-        if [[ "$current_user" != "root" ]]; then
-            echo "错误: 当前执行用户(${current_user})不是 root，无法修改用户 ${SERVER_USER}"
-            exit 1
-        fi
-        usermod -s "$TARGET_SHELL" "$SERVER_USER"
-        passwd -l "$SERVER_USER" >/dev/null || true
-        return
-    fi
-
     if [[ "$current_user" != "root" ]]; then
         echo "错误: 当前执行用户(${current_user})不是 root，无法创建用户 ${SERVER_USER}"
         exit 1
     fi
 
-    useradd -m -s "$TARGET_SHELL" "$SERVER_USER"
+    if id "$SERVER_USER" >/dev/null 2>&1; then
+        usermod -s "$TARGET_SHELL" "$SERVER_USER" >/dev/null || true
+    else
+        useradd -m -s "$TARGET_SHELL" "$SERVER_USER"
+    fi
     passwd -l "$SERVER_USER" >/dev/null || true
 }
 
 ensure_user
-
 SERVER_HOME=$(getent passwd "$SERVER_USER" | cut -d: -f6)
 if [[ -z "$SERVER_HOME" ]]; then
     echo "错误: 无法解析用户 ${SERVER_USER} 的 home 目录"
     exit 1
 fi
 
+echo "=> 配置 SSH 公钥授权 ..."
 SERVER_SSH_DIR="${SERVER_HOME}/.ssh"
 AUTH_KEYS="${SERVER_SSH_DIR}/authorized_keys"
 
@@ -152,11 +146,13 @@ if ! grep -qxF "$AUTH_LINE" "$AUTH_KEYS"; then
     printf '%s\n' "$AUTH_LINE" >> "$AUTH_KEYS"
 fi
 
+echo "=> 设置 ${SERVER_USER} 的 home 目录权限 ..."
 SERVER_GROUP=$(id -gn "$SERVER_USER")
-chown -R "$SERVER_USER:$SERVER_GROUP" "$SERVER_SSH_DIR"
+mkdir -p "$SERVER_HOME"
+chown -R "$SERVER_USER:$SERVER_GROUP" "$SERVER_HOME"
 
 echo "=================================================="
-echo "✅ SSH 授权配置完成"
+echo "✅ SSH 用户 ${SERVER_USER} 配置完成！"
 echo "server_user: ${SERVER_USER}"
 echo "server_ssh_dir: ${SERVER_SSH_DIR}"
 echo "login_shell: ${TARGET_SHELL}"

@@ -20,7 +20,7 @@ UsePAM yes
 # Root login and privilege separation
 PermitRootLogin prohibit-password
 StrictModes yes
-PermitUserEnvironment no
+PermitUserEnvironment yes
 
 # Security hardening
 Protocol 2
