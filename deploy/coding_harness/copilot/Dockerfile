@@ -18,10 +18,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && rm -rf /var/lib/apt/lists/*
 COPY ./sshd_config /etc/ssh/sshd_config
 
-# Install GitHub Copilot CLI and acpx globally via npm.
-# @github/copilot provides the `copilot` binary.
-# acpx provides the `acpx` binary (invocable via `npx acpx`).
+# Install GitHub Copilot CLI
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g "@github/copilot@${COPILOT_VERSION}" acpx
+    npm install -g "@github/copilot@${COPILOT_VERSION}"
 
 EXPOSE 22
