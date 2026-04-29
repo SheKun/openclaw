@@ -161,7 +161,7 @@
   },
   "browser": {
     "enabled": true,
-    "evaluateEnabled": false,
+    "evaluateEnabled": true,
     "executablePath": "${CHROMIUM_EXECUTABLE_PATH}",
     "headless": false,
     "noSandbox": true,
@@ -250,16 +250,15 @@
       {
         "id": "coder",
         "name": "Ape",
-        "workspace": "~/.openclaw/workspace-coder",
-        "agentDir": "~/.openclaw/agents/coder/agent",
-        "model": "litellm/kimi-k2.5",
-        "subagents": {
-          "allowAgents": []
-        },
-        "tools": {
-          "profile": "coding"
-        },
-        "skills": []
+        "runtime": {
+          "type": "acp",
+          "acp": {
+            "agent": "copilot",
+            "backend": "acpx",
+            "mode": "persistent",
+            "cwd": "/projects"
+          }
+        }
       },
       {
         "id": "planner",
@@ -287,9 +286,11 @@
     },
     {
       "agentId": "coder",
+      "type": "acp",
       "match": {
         "channel": "feishu",
-        "accountId": "coder"
+        "accountId": "coder",
+        "peer": { "kind": "dm", "id": "ou_8b8d96a3c236372093e2717c879ccaad" }
       }
     },
     {

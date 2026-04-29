@@ -3,14 +3,12 @@ services:
     container_name: coder-copilot
     image: ${CODER_COPILOT_IMAGE:-coder-copilot:latest}
     user: "root"
-    env_file:
-      - .coder_env
     environment:
-      FINAL_USER: root
-      COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
+      CODER_PUB_KEY: ${CODER_PUB_KEY:-}
+      GH_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
     volumes:
-      - ~/.coder-harness/projects:/home/coder/projects
-      - ~/.coder-harness/.ssh:/home/coder/.ssh
+      - ${CODER_HARNESS_CONFIG_DIR}/projects:/projects
+      - ${CODER_HARNESS_CONFIG_DIR}/.ssh:/home/coder/.ssh
       - ./coder_entry.sh:/entrypoint.sh:ro
       - ./create_ssh_user.sh:/create_ssh_user.sh:ro
     init: true
@@ -24,16 +22,21 @@ services:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
     shm_size: '1gb'
     user: "root"
-    env_file:
-      - .openclaw_env
     environment:
       HOME: /home/node
       TERM: xterm-256color
+      OPENCLAW_AGENT_DIR: ${OPENCLAW_AGENT_DIR:-}
+      PI_CODING_AGENT_DIR: ${PI_CODING_AGENT_DIR:-}
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
-      OPENCLAW_ALLOW_INSECURE_PRIVATE_WS: ${OPENCLAW_ALLOW_INSECURE_PRIVATE_WS:-}
-      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY:-}
-      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY:-}
-      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE:-}
+      FEISHU_APP_ID_STEWARD: ${FEISHU_APP_ID_STEWARD:-}
+      FEISHU_APP_SECRET_STEWARD: ${FEISHU_APP_SECRET_STEWARD:-}
+      FEISHU_APP_ID_CODER: ${FEISHU_APP_ID_CODER:-}
+      FEISHU_APP_SECRET_CODER: ${FEISHU_APP_SECRET_CODER:-}
+      FEISHU_APP_ID_PLANNER: ${FEISHU_APP_ID_PLANNER:-}
+      FEISHU_APP_SECRET_PLANNER: ${FEISHU_APP_SECRET_PLANNER:-}
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      AGENT_SECRET_DB_PASSWORD: ${AGENT_SECRET_DB_PASSWORD:-}
       TZ: ${OPENCLAW_TZ:-UTC}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
@@ -43,10 +46,11 @@ services:
       - apt_archives:/var/cache/apt/archives/
       - npm_archives:/root/.npm
       - npm_archives:/home/node/.npm
-      - ~/.openclaw/.ssh:/root/.ssh
-      - ~/.openclaw/.ssh:/home/node/.ssh
-      - ~/.openclaw/.gitconfig:/root/.gitconfig
-      - ~/.openclaw/.gitconfig:/home/node/.gitconfig
+      - ${OPENCLAW_CONFIG_DIR}/.ssh:/root/.ssh
+      - ${OPENCLAW_CONFIG_DIR}/.ssh:/home/node/.ssh
+      - ${OPENCLAW_CONFIG_DIR}/.gitconfig:/root/.gitconfig
+      - ${OPENCLAW_CONFIG_DIR}/.gitconfig:/home/node/.gitconfig
+      - ${OPENCLAW_CONFIG_DIR}/projects:/projects
       ## Uncomment the lines below to enable sandbox isolation
       ## (agents.defaults.sandbox). Requires Docker CLI in the image
       ## (build with --build-arg OPENCLAW_INSTALL_DOCKER_CLI=1) or use
@@ -93,11 +97,7 @@ services:
       HOME: /home/node
       TERM: xterm-256color
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
-      OPENCLAW_ALLOW_INSECURE_PRIVATE_WS: ${OPENCLAW_ALLOW_INSECURE_PRIVATE_WS:-}
       BROWSER: echo
-      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY:-}
-      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY:-}
-      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE:-}
       TZ: ${OPENCLAW_TZ:-UTC}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw

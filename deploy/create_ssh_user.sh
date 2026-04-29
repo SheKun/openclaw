@@ -13,6 +13,7 @@ Options:
     --server-user <name>           SSH service-side user (required)
     --public-key <value>           SSH public key content (required)
     --auth-options <value>         Full authorized_keys options prefix (optional)
+    --nologin                      Create/update user with nologin shell (optional)
 
     --help                         Show this help
 EOF
@@ -42,8 +43,9 @@ require_value() {
 SERVER_USER=""
 PUBLIC_KEY=""
 AUTH_OPTIONS=""
+NOLOGIN_MODE="false"
 
-PARSED_ARGS=$(getopt -o h --long help,server-user:,public-key:,auth-options: -n create_ssh_user.sh -- "$@") \
+PARSED_ARGS=$(getopt -o h --long help,server-user:,public-key:,auth-options:,nologin -n create_ssh_user.sh -- "$@") \
     || die "参数解析失败"
 eval set -- "$PARSED_ARGS"
 
@@ -56,6 +58,10 @@ while [[ $# -gt 0 ]]; do
         --server-user|--public-key|--auth-options)
             set_option "$1" "$2"
             shift 2
+            ;;
+        --nologin)
+            NOLOGIN_MODE="true"
+            shift
             ;;
         --)
             shift
@@ -72,12 +78,29 @@ done
 require_value "$SERVER_USER" "--server-user"
 require_value "$PUBLIC_KEY" "--public-key"
 
-NOLOGIN_SHELL="/usr/sbin/nologin"
-if [[ ! -x "$NOLOGIN_SHELL" ]]; then
-    NOLOGIN_SHELL="/sbin/nologin"
-fi
-if [[ ! -x "$NOLOGIN_SHELL" ]]; then
-    NOLOGIN_SHELL="/usr/bin/false"
+resolve_nologin_shell() {
+    local shell="/usr/sbin/nologin"
+    if [[ ! -x "$shell" ]]; then
+        shell="/sbin/nologin"
+    fi
+    if [[ ! -x "$shell" ]]; then
+        shell="/usr/bin/false"
+    fi
+    printf '%s\n' "$shell"
+}
+
+resolve_login_shell() {
+    local shell="/bin/bash"
+    if [[ ! -x "$shell" ]]; then
+        shell="/bin/sh"
+    fi
+    printf '%s\n' "$shell"
+}
+
+if [[ "$NOLOGIN_MODE" == "true" ]]; then
+    TARGET_SHELL="$(resolve_nologin_shell)"
+else
+    TARGET_SHELL="$(resolve_login_shell)"
 fi
 
 ensure_user() {
@@ -89,7 +112,7 @@ ensure_user() {
             echo "错误: 当前执行用户(${current_user})不是 root，无法修改用户 ${SERVER_USER}"
             exit 1
         fi
-        usermod -s "$NOLOGIN_SHELL" "$SERVER_USER"
+        usermod -s "$TARGET_SHELL" "$SERVER_USER"
         passwd -l "$SERVER_USER" >/dev/null || true
         return
     fi
@@ -99,7 +122,7 @@ ensure_user() {
         exit 1
     fi
 
-    useradd -m -s "$NOLOGIN_SHELL" "$SERVER_USER"
+    useradd -m -s "$TARGET_SHELL" "$SERVER_USER"
     passwd -l "$SERVER_USER" >/dev/null || true
 }
 
@@ -136,5 +159,6 @@ echo "=================================================="
 echo "✅ SSH 授权配置完成"
 echo "server_user: ${SERVER_USER}"
 echo "server_ssh_dir: ${SERVER_SSH_DIR}"
-echo "nologin_shell: ${NOLOGIN_SHELL}"
+echo "login_shell: ${TARGET_SHELL}"
+echo "nologin_mode: ${NOLOGIN_MODE}"
 echo "=================================================="

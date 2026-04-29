@@ -1,1 +1,1 @@
-ssh coder-copilot "acpx '$@'"
+ssh -o StrictHostKeyChecking=no coder-copilot "acpx '$@'"

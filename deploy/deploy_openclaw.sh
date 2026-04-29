@@ -31,19 +31,23 @@ if [ -z "$OPENCLAW_VERSION" ]; then
 fi
 VERSION="${OPENCLAW_VERSION}-build202604230912"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
-COPILOT_HARNESS_BASE_IMAGE="${COPILOT_HARNESS_BASE_IMAGE:-node:22-bookworm-slim}"
+OPENCLAW_CONFIG_DIR="~/.openclaw"
 
-if ! command -v npm >/dev/null 2>&1; then
-  echo "错误: 需要 npm 命令来查询 Copilot 最新版本，请先安装 npm。"
-  exit 1
-fi
-
-COPILOT_VERSION=$(npm view @github/copilot version 2>/dev/null | tr -d '[:space:]')
+COPILOT_VERSION="1.0.38" # 这里可以指定一个固定版本，或者留空以自动查询最新版本
 if [ -z "$COPILOT_VERSION" ]; then
-  echo "错误: 无法获取 @github/copilot 的最新版本号。"
-  exit 1
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "错误: 需要 npm 命令来查询 Copilot 最新版本，请先安装 npm。"
+    exit 1
+  fi
+  COPILOT_VERSION=$(npm view @github/copilot version 2>/dev/null | tr -d '[:space:]')
+  if [ -z "$COPILOT_VERSION" ]; then
+    echo "错误: 无法获取 @github/copilot 的最新版本号。"
+    exit 1
+  fi
 fi
+COPILOT_HARNESS_BASE_IMAGE="node:22-bookworm-slim"
 CODER_COPILOT_IMAGE="krepus.com/coder-copilot:${COPILOT_VERSION}"
+CODER_HARNESS_CONFIG_DIR="~/.coder-harness"
 echo "=> 检测到最新 Copilot CLI 版本: ${COPILOT_VERSION}"
 echo "=> 将构建并部署 Harness 镜像: ${CODER_COPILOT_IMAGE}"
 
@@ -71,7 +75,7 @@ const id = (defaultAgent?.id || fallbackAgent?.id || "main").toString().trim();
 process.stdout.write(id || "main");
 ' "$CONFIG_JSON_PATH")
 
-DEFAULT_AGENT_DIR="~/.openclaw/agents/${DEFAULT_AGENT_ID}/agent"
+DEFAULT_AGENT_DIR="${OPENCLAW_CONFIG_DIR}/agents/${DEFAULT_AGENT_ID}/agent"
 echo "=> 从配置解析默认 Agent: ${DEFAULT_AGENT_ID}"
 echo "=> 将设置 OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}"
 
@@ -100,6 +104,7 @@ else
   docker build --provenance=false \
     --build-arg "BASE_IMAGE=${COPILOT_HARNESS_BASE_IMAGE}" \
     --build-arg "COPILOT_VERSION=${COPILOT_VERSION}" \
+    --secret id=GH_TOKEN,env=COPILOT_GITHUB_TOKEN \
     -t "${CODER_COPILOT_IMAGE}" \
     -f "${COPILOT_HARNESS_DIR}/Dockerfile" "${COPILOT_HARNESS_DIR}"
 fi
@@ -176,42 +181,42 @@ scp "${SCRIPT_DIR}/create_ssh_user.sh" "$REMOTE_HOST:${DEPLOY_DIR}/create_ssh_us
 scp "${SCRIPT_DIR}/coding_harness/custom_acpx.sh" "$REMOTE_HOST:${DEPLOY_DIR}/custom_acpx.sh"
 ssh "$REMOTE_HOST" "chmod +x ${DEPLOY_DIR}/*.sh"
 
-echo "=> 检查coder harness配置目录 ~/.coder-harness ..."
+echo "=> 检查coder harness配置目录 ${CODER_HARNESS_CONFIG_DIR} ..."
 ssh "$REMOTE_HOST" "
-  if [ ! -d ~/.coder-harness ]; then
+  if [ ! -d ${CODER_HARNESS_CONFIG_DIR} ]; then
     echo '   => 创建 coder harness 配置目录 ...'
-    mkdir -p ~/.coder-harness
-    mkdir -p ~/.coder-harness/.ssh
-    mkdir -p ~/.coder-harness/projects
+    mkdir -p ${CODER_HARNESS_CONFIG_DIR}
+    mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh
+    mkdir -p ${CODER_HARNESS_CONFIG_DIR}/projects
   else
-    echo '   => coder harness 配置目录 ~/.coder-harness 已存在，跳过创建 ...'
+    echo '   => coder harness 配置目录 ${CODER_HARNESS_CONFIG_DIR} 已存在，跳过创建 ...'
   fi
 "
 
-echo "=> 检查配置目录 ~/.openclaw ..."
+echo "=> 检查配置目录 ${OPENCLAW_CONFIG_DIR} ..."
 ssh "$REMOTE_HOST" "
-  if [ ! -d ~/.openclaw ]; then
+  if [ ! -d ${OPENCLAW_CONFIG_DIR} ]; then
     echo '   => 创建配置目录并初始化 OpenClaw 配置 ...'
-    mkdir -p ~/.openclaw
-    mkdir -p ~/.openclaw/.ssh
-    mkdir -p ~/.openclaw/.gitconfig
+    mkdir -p ${OPENCLAW_CONFIG_DIR}
+    mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh
+    mkdir -p ${OPENCLAW_CONFIG_DIR}/.gitconfig
   else
-    echo '   => 配置目录 ~/.openclaw 已存在，跳过创建 ...'
+    echo '   => 配置目录 ${OPENCLAW_CONFIG_DIR} 已存在，跳过创建 ...'
   fi
 "
-echo "=> 复制配置文件 openclaw.json 到 ~/.openclaw/openclaw.json ..."
-ssh "$REMOTE_HOST" "cp ${DEPLOY_DIR}/openclaw.json ~/.openclaw/openclaw.json"
+echo "=> 复制配置文件 openclaw.json 到 ${OPENCLAW_CONFIG_DIR}/openclaw.json ..."
+ssh "$REMOTE_HOST" "cp ${DEPLOY_DIR}/openclaw.json ${OPENCLAW_CONFIG_DIR}/openclaw.json"
 
 echo "=> 创建openclaw认证密钥对 ..."
 ssh "$REMOTE_HOST" "
-  if [ ! -f ~/.openclaw/.ssh/auth ]; then
+  if [ ! -f ${OPENCLAW_CONFIG_DIR}/.ssh/auth ]; then
     echo '   => 生成新的认证密钥对 ...'
-    ssh-keygen -t ed25519 -f ~/.openclaw/.ssh/auth -N '' -q
+    ssh-keygen -t ed25519 -f ${OPENCLAW_CONFIG_DIR}/.ssh/auth -N '' -C 'openclaw' -q
   else
     echo '   => 认证密钥对已存在，跳过生成 ...'
   fi
 "
-AUTH_PUB_KEY=$(ssh "$REMOTE_HOST" "cat ~/.openclaw/.ssh/auth.pub")
+AUTH_PUB_KEY=$(ssh "$REMOTE_HOST" "cat ${OPENCLAW_CONFIG_DIR}/.ssh/auth.pub")
 
 echo "=> 创建openclaw-gateway服务访问宿主机CDP调试端口的SSH隧道账号 ..."
 AUTH_OPTIONS="restrict,port-forwarding,permitopen=\"127.0.0.1:9222\",command=\"echo Tunnel Ready. Press Ctrl+C to disconnect.; read\""
@@ -219,19 +224,25 @@ ssh -t "$REMOTE_HOST" "
   sudo bash ${DEPLOY_DIR}/create_ssh_user.sh \
     --server-user cdp_tunnel \
     --public-key '${AUTH_PUB_KEY}' \
-    --auth-options '${AUTH_OPTIONS}'
+    --auth-options '${AUTH_OPTIONS}' \
+    --nologin
 "
 
-# 保存 .env 文件以保证 podman-compose up -d 可以持久化加载所需的环境变量
-echo "=> 生成 .openclaw_env 文件 ..."
+# 统一使用 .env：既用于 compose 变量替换，也为 service environment 提供取值
+echo "=> 生成 .env 文件 (compose + runtime 变量) ..."
 ssh "$REMOTE_HOST" "
-cat <<EOF > ${DEPLOY_DIR}/.openclaw_env
+cat <<EOF > ${DEPLOY_DIR}/.env
 OPENCLAW_IMAGE=${IMAGE_NAME}
 CODER_COPILOT_IMAGE=${CODER_COPILOT_IMAGE}
-OPENCLAW_CONFIG_DIR=~/.openclaw
+OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
+CODER_HARNESS_CONFIG_DIR=${CODER_HARNESS_CONFIG_DIR}
 OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}
 PI_CODING_AGENT_DIR=${DEFAULT_AGENT_DIR}
+CODER_PUB_KEY='${AUTH_PUB_KEY}'
+OPENCLAW_TZ=${OPENCLAW_TZ:-UTC}
+
 OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
+COPILOT_GITHUB_TOKEN=${COPILOT_GITHUB_TOKEN:-}
 FEISHU_APP_ID_STEWARD=${FEISHU_APP_ID_STEWARD:-}
 FEISHU_APP_SECRET_STEWARD=${FEISHU_APP_SECRET_STEWARD:-}
 FEISHU_APP_ID_CODER=${FEISHU_APP_ID_CODER:-}
@@ -241,14 +252,6 @@ FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
 LITELLM_API_KEY=${LITELLM_API_KEY:-}
 PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
 AGENT_SECRET_DB_PASSWORD=${AGENT_SECRET_DB_PASSWORD:-}
-EOF
-"
-
-echo "=> 生成 .coder_env 文件 ..."
-ssh "$REMOTE_HOST" "
-cat <<EOF > ${DEPLOY_DIR}/.coder_env
-CODER_PUB_KEY='${AUTH_PUB_KEY}'
-COPILOT_GITHUB_TOKEN=${COPILOT_GITHUB_TOKEN:-}
 EOF
 "
 
