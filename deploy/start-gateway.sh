@@ -24,22 +24,27 @@ rm -rf /home/node/.openclaw/browser/openclaw > /dev/null 2>&1
 [ -f ./.env ] && set -a && . ./.env && set +a
 
 # 自动建立 CDP 隧道到宿主机 (用于访问宿主机的浏览器)
-# 假设宿主机的 CDP 专用账号为 cdp_tunnel
-if [ -f ~/.ssh/host_cdp ]; then
-  HOST_IP="172.17.0.1"
-  if [ -n "$HOST_IP" ]; then
-    echo "[start-gateway] 尝试建立 CDP 隧道至宿主机 ($HOST_IP) ..."
-    # 使用 StrictHostKeyChecking=no 避免首次连接时的手动确认
-    ssh -i ~/.ssh/host_cdp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-        -N -L 9222:127.0.0.1:9222 cdp_tunnel@"$HOST_IP" &
-    TUNNEL_PID=$!
+echo "[start-gateway] 尝试建立 CDP 隧道至宿主机 ($HOST_IP) ..."
+TUNNEL_PID=""
+if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o ExitOnForwardFailure=yes -o ConnectTimeout=8 \
+    -N -L 9222:127.0.0.1:9222 cdp_tunnel &
+then
+  TUNNEL_PID=$!
+  # 给 ssh 一点时间暴露连接/转发失败（例如主机不可达、端口不可用）
+  sleep 1
+  if kill -0 "$TUNNEL_PID" 2>/dev/null; then
     echo "[start-gateway] CDP 隧道已在后台运行 (PID: $TUNNEL_PID)。"
-    # 当容器退出时，确保清理隧道进程
-    trap "kill $TUNNEL_PID 2>/dev/null || true" EXIT
   else
-    echo "[start-gateway] 警告: 无法检测到宿主机 IP，跳过 CDP 隧道建立。"
+    wait "$TUNNEL_PID" 2>/dev/null || true
+    TUNNEL_PID=""
+    echo "[start-gateway] 警告: CDP 隧道建立失败，将继续启动 gateway（不使用宿主机 CDP）。"
   fi
+else
+  echo "[start-gateway] 警告: 无法启动 CDP 隧道命令，将继续启动 gateway（不使用宿主机 CDP）。"
 fi
+# 当容器退出时，确保清理隧道进程
+trap '[ -n "$TUNNEL_PID" ] && kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
 
 # 自动安装并在配置中启用 /home/node/.openclaw/extensions 下的插件
 echo "[start-gateway] 检查并自动安装扩展插件 ..."

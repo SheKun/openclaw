@@ -250,6 +250,7 @@
       {
         "id": "coder",
         "name": "Ape",
+        "workspace": "~/.openclaw/workspace-coder",
         "runtime": {
           "type": "acp",
           "acp": {

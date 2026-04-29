@@ -10,7 +10,7 @@ services:
       COPILOT_MODEL: ${COPILOT_MODEL:-}
       COPILOT_PROVIDER_API_KEY: ${COPILOT_PROVIDER_API_KEY:-}
     volumes:
-      - ${CODER_HARNESS_CONFIG_DIR}/projects:/projects
+      - ${OPENCLAW_CONFIG_DIR}/projects:/projects
       - ${CODER_HARNESS_CONFIG_DIR}/.ssh:/home/coder/.ssh
       - ${CODER_HARNESS_CONFIG_DIR}/.copilot:/home/coder/.copilot
       - ./coder_entry.sh:/entrypoint.sh:ro

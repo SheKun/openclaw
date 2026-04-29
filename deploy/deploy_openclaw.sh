@@ -182,7 +182,6 @@ ssh "$REMOTE_HOST" "mkdir -p ${DEPLOY_DIR}"
 
 echo "=> 复制部署文件到远程服务器 ..."
 scp "${SCRIPT_DIR}/docker-compose.yml" "$REMOTE_HOST:${DEPLOY_DIR}/"
-scp "${SCRIPT_DIR}/openclaw_conf.json" "$REMOTE_HOST:${DEPLOY_DIR}/openclaw.json"
 scp "${SCRIPT_DIR}/coding_harness/copilot/coder_entry.sh" "$REMOTE_HOST:${DEPLOY_DIR}/coder_entry.sh"
 scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
 scp "${SCRIPT_DIR}/create_ssh_user.sh" "$REMOTE_HOST:${DEPLOY_DIR}/create_ssh_user.sh"
@@ -195,12 +194,13 @@ ssh "$REMOTE_HOST" "
     echo '   => 创建 coder harness 配置目录 ...'
     mkdir -p ${CODER_HARNESS_CONFIG_DIR}
     mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh
-    mkdir -p ${CODER_HARNESS_CONFIG_DIR}/projects
     mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.copilot
   else
     echo '   => coder harness 配置目录 ${CODER_HARNESS_CONFIG_DIR} 已存在，跳过创建 ...'
   fi
 "
+echo "=> 复制 coder harness 配置文件到 ${CODER_HARNESS_CONFIG_DIR} ..."
+scp ${COPILOT_HARNESS_DIR}/copilot-instructions.md "$REMOTE_HOST:${CODER_HARNESS_CONFIG_DIR}/copilot-instructions.md"
 
 echo "=> 检查配置目录 ${OPENCLAW_CONFIG_DIR} ..."
 ssh "$REMOTE_HOST" "
@@ -209,12 +209,13 @@ ssh "$REMOTE_HOST" "
     mkdir -p ${OPENCLAW_CONFIG_DIR}
     mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh
     mkdir -p ${OPENCLAW_CONFIG_DIR}/.gitconfig
+    mkdir -p ${OPENCLAW_CONFIG_DIR}/projects
   else
     echo '   => 配置目录 ${OPENCLAW_CONFIG_DIR} 已存在，跳过创建 ...'
   fi
 "
 echo "=> 复制配置文件 openclaw.json 到 ${OPENCLAW_CONFIG_DIR}/openclaw.json ..."
-ssh "$REMOTE_HOST" "cp ${DEPLOY_DIR}/openclaw.json ${OPENCLAW_CONFIG_DIR}/openclaw.json"
+scp ${SCRIPT_DIR}/openclaw_conf.json "$REMOTE_HOST:${OPENCLAW_CONFIG_DIR}/openclaw.json"
 
 echo "=> 创建openclaw认证密钥对 ..."
 ssh "$REMOTE_HOST" "
@@ -226,6 +227,20 @@ ssh "$REMOTE_HOST" "
   fi
 "
 AUTH_PUB_KEY=$(ssh "$REMOTE_HOST" "cat ${OPENCLAW_CONFIG_DIR}/.ssh/auth.pub")
+ssh "$REMOTE_HOST" "
+  cat <<EOF > ${OPENCLAW_CONFIG_DIR}/.ssh/config
+Host *
+  IdentityFile ~/.ssh/auth
+Host github.com
+  HostName github.com
+  User git
+Host coder-copilot
+  User coder
+Host cdp_tunnel
+  HostName 172.17.0.1
+  User cdp_tunnel
+EOF
+"
 
 echo "=> 创建openclaw-gateway服务访问宿主机CDP调试端口的SSH隧道账号 ..."
 AUTH_OPTIONS="restrict,port-forwarding,permitopen=\"127.0.0.1:9222\",command=\"echo Tunnel Ready. Press Ctrl+C to disconnect.; read\""
