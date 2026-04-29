@@ -6,9 +6,13 @@ services:
     environment:
       CODER_PUB_KEY: ${CODER_PUB_KEY:-}
       GH_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
+      COPILOT_PROVIDER_BASE_URL: ${COPILOT_PROVIDER_BASE_URL:-}
+      COPILOT_MODEL: ${COPILOT_MODEL:-}
+      COPILOT_PROVIDER_API_KEY: ${COPILOT_PROVIDER_API_KEY:-}
     volumes:
       - ${CODER_HARNESS_CONFIG_DIR}/projects:/projects
       - ${CODER_HARNESS_CONFIG_DIR}/.ssh:/home/coder/.ssh
+      - ${CODER_HARNESS_CONFIG_DIR}/.copilot:/home/coder/.copilot
       - ./coder_entry.sh:/entrypoint.sh:ro
       - ./create_ssh_user.sh:/create_ssh_user.sh:ro
     init: true
@@ -16,6 +20,7 @@ services:
     entrypoint: ["/entrypoint.sh"]
     networks:
       - openclaw-internal
+      - local-llm-service
 
   openclaw-gateway:
     container_name: openclaw-gateway

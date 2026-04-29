@@ -1,2 +1,2 @@
 #!/bin/sh
-exec ssh -T -o StrictHostKeyChecking=no coder-copilot copilot --acp --stdio
+exec ssh -Tq -o StrictHostKeyChecking=no coder-copilot copilot --acp --stdio

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Coding harness image with GitHub Copilot CLI and acpx for OpenClaw ACP sessions.
+# Coding harness image with GitHub Copilot CLI for OpenClaw ACP sessions.
 #
 
 ARG BASE_IMAGE=${BASE_IMAGE:-node:22-bookworm-slim}

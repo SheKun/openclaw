@@ -11,6 +11,7 @@ PROJECT_ROOT="${SCRIPT_DIR}/.."
 COPILOT_HARNESS_DIR="${SCRIPT_DIR}/coding_harness/copilot"
 cd "${PROJECT_ROOT}" || exit 1
 
+echo "0. 配置环境变量 ..."
 # 加载环境变量
 GLOBAL_ENV_FILE="${PROJECT_ROOT}/../.env"
 LOCAL_ENV_FILE="${SCRIPT_DIR}/.env"
@@ -23,7 +24,7 @@ if [ -f "$LOCAL_ENV_FILE" ]; then
   set -a; source <(sed 's/\r//' "$LOCAL_ENV_FILE"); set +a
 fi
 
-# 从 package.json 获取openclaw版本号
+# openclaw 服务配置
 OPENCLAW_VERSION=$(grep -m1 '"version":' package.json | awk -F'"' '{print $4}')
 if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
@@ -32,27 +33,6 @@ fi
 VERSION="${OPENCLAW_VERSION}-build202604230912"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 OPENCLAW_CONFIG_DIR="~/.openclaw"
-
-COPILOT_VERSION="1.0.38" # 这里可以指定一个固定版本，或者留空以自动查询最新版本
-if [ -z "$COPILOT_VERSION" ]; then
-  if ! command -v npm >/dev/null 2>&1; then
-    echo "错误: 需要 npm 命令来查询 Copilot 最新版本，请先安装 npm。"
-    exit 1
-  fi
-  COPILOT_VERSION=$(npm view @github/copilot version 2>/dev/null | tr -d '[:space:]')
-  if [ -z "$COPILOT_VERSION" ]; then
-    echo "错误: 无法获取 @github/copilot 的最新版本号。"
-    exit 1
-  fi
-fi
-COPILOT_HARNESS_BASE_IMAGE="node:22-bookworm-slim"
-CODER_COPILOT_IMAGE="krepus.com/coder-copilot:${COPILOT_VERSION}"
-CODER_HARNESS_CONFIG_DIR="~/.coder-harness"
-echo "=> 检测到最新 Copilot CLI 版本: ${COPILOT_VERSION}"
-echo "=> 将构建并部署 Harness 镜像: ${CODER_COPILOT_IMAGE}"
-
-REMOTE_HOST="${1:-rmbook}"
-DEPLOY_DIR="~/openclaw-deploy"
 
 CONFIG_JSON_PATH="${SCRIPT_DIR}/openclaw_conf.json"
 if [ ! -f "$CONFIG_JSON_PATH" ]; then
@@ -78,6 +58,34 @@ process.stdout.write(id || "main");
 DEFAULT_AGENT_DIR="${OPENCLAW_CONFIG_DIR}/agents/${DEFAULT_AGENT_ID}/agent"
 echo "=> 从配置解析默认 Agent: ${DEFAULT_AGENT_ID}"
 echo "=> 将设置 OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}"
+
+# Copilot Harness 服务配置
+COPILOT_VERSION="1.0.38" # 这里可以指定一个固定版本，或者留空以自动查询最新版本
+if [ -z "$COPILOT_VERSION" ]; then
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "错误: 需要 npm 命令来查询 Copilot 最新版本，请先安装 npm。"
+    exit 1
+  fi
+  COPILOT_VERSION=$(npm view @github/copilot version 2>/dev/null | tr -d '[:space:]')
+  if [ -z "$COPILOT_VERSION" ]; then
+    echo "错误: 无法获取 @github/copilot 的最新版本号。"
+    exit 1
+  fi
+fi
+COPILOT_HARNESS_BASE_IMAGE="node:22-bookworm-slim"
+CODER_COPILOT_IMAGE="krepus.com/coder-copilot:${COPILOT_VERSION}"
+CODER_HARNESS_CONFIG_DIR="~/.coder-harness"
+echo "=> 检测到最新 Copilot CLI 版本: ${COPILOT_VERSION}"
+echo "=> 将构建并部署 Harness 镜像: ${CODER_COPILOT_IMAGE}"
+
+COPILOT_MODEL="deepseek-v4-pro"
+COPILOT_PROVIDER_MAX_PROMPT_TOKEN=1000000
+COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=393216
+
+# 远程部署配置
+REMOTE_HOST="${1:-rmbook}"
+DEPLOY_DIR="~/openclaw-deploy"
+
 
 echo "1. 检查是否存在镜像 ${IMAGE_NAME} ..."
 if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
@@ -188,6 +196,7 @@ ssh "$REMOTE_HOST" "
     mkdir -p ${CODER_HARNESS_CONFIG_DIR}
     mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh
     mkdir -p ${CODER_HARNESS_CONFIG_DIR}/projects
+    mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.copilot
   else
     echo '   => coder harness 配置目录 ${CODER_HARNESS_CONFIG_DIR} 已存在，跳过创建 ...'
   fi
@@ -240,6 +249,10 @@ OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}
 PI_CODING_AGENT_DIR=${DEFAULT_AGENT_DIR}
 CODER_PUB_KEY='${AUTH_PUB_KEY}'
 OPENCLAW_TZ=${OPENCLAW_TZ:-UTC}
+COPILOT_PROVIDER_BASE_URL=http://litellm-gateway:8081/v1
+COPILOT_MODEL=${COPILOT_MODEL:-qwen3.6-plus}
+COPILOT_PROVIDER_MAX_PROMPT_TOKEN=${COPILOT_PROVIDER_MAX_PROMPT_TOKEN:-4096}
+COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=${COPILOT_PROVIDER_MAX_OUTPUT_TOKENS:-2048}
 
 OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
 COPILOT_GITHUB_TOKEN=${COPILOT_GITHUB_TOKEN:-}
@@ -250,6 +263,7 @@ FEISHU_APP_SECRET_CODER=${FEISHU_APP_SECRET_CODER:-}
 FEISHU_APP_ID_PLANNER=${FEISHU_APP_ID_PLANNER:-}
 FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
 LITELLM_API_KEY=${LITELLM_API_KEY:-}
+COPILOT_PROVIDER_API_KEY=${LITELLM_API_KEY:-}
 PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
 AGENT_SECRET_DB_PASSWORD=${AGENT_SECRET_DB_PASSWORD:-}
 EOF
