@@ -9,18 +9,11 @@ chmod 0755 /run/sshd
 # 2. 生成 SSH 主机密钥
 ssh-keygen -A
 
-# 3. 创建用户 coder
+# 3. 配置 SSH 公钥
 ./create_ssh_user.sh \
-    --server-user "coder" \
-    --public-key "${CODER_PUB_KEY:-}"
+    --server-user "root" \
+    --home "/root" \
+    --public-key "${OPENCLAW_PUB_KEY:-}"
 
-# 4. Inject credentials into SSH session environment so copilot can authenticate.
-#    PermitUserEnvironment yes in sshd_config enables ~/.ssh/environment lookup.
-SSH_ENV_FILE=/home/coder/.ssh/environment
-: > "$SSH_ENV_FILE"
-[[ -n "${GH_TOKEN:-}" ]] && echo "GH_TOKEN=${GH_TOKEN}" >> "$SSH_ENV_FILE"
-chmod 600 "$SSH_ENV_FILE"
-chown coder:coder "$SSH_ENV_FILE"
-
-# 5. 启动 sshd
+# 4. 启动 sshd（environment 文件由部署脚本预生成并通过卷挂载提供）
 exec /usr/sbin/sshd -D -e

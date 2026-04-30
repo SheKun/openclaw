@@ -185,7 +185,7 @@ scp "${SCRIPT_DIR}/docker-compose.yml" "$REMOTE_HOST:${DEPLOY_DIR}/"
 scp "${SCRIPT_DIR}/coding_harness/copilot/coder_entry.sh" "$REMOTE_HOST:${DEPLOY_DIR}/coder_entry.sh"
 scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
 scp "${SCRIPT_DIR}/create_ssh_user.sh" "$REMOTE_HOST:${DEPLOY_DIR}/create_ssh_user.sh"
-scp "${SCRIPT_DIR}/coding_harness/custom_acpx.sh" "$REMOTE_HOST:${DEPLOY_DIR}/custom_acpx.sh"
+scp "${SCRIPT_DIR}/coding_harness/copilot/custom_acpx.sh" "$REMOTE_HOST:${DEPLOY_DIR}/custom_acpx.sh"
 ssh "$REMOTE_HOST" "chmod +x ${DEPLOY_DIR}/*.sh"
 
 echo "=> 检查coder harness配置目录 ${CODER_HARNESS_CONFIG_DIR} ..."
@@ -201,6 +201,12 @@ ssh "$REMOTE_HOST" "
 "
 echo "=> 复制 coder harness 配置文件到 ${CODER_HARNESS_CONFIG_DIR} ..."
 scp ${COPILOT_HARNESS_DIR}/copilot-instructions.md "$REMOTE_HOST:${CODER_HARNESS_CONFIG_DIR}/copilot-instructions.md"
+
+echo "=> 生成 SSH environment 文件 (Copilot BYOK 变量，通过卷挂载注入容器) ..."
+ssh "$REMOTE_HOST" "mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh"
+ssh "$REMOTE_HOST" "cat > ${CODER_HARNESS_CONFIG_DIR}/.ssh/environment && chmod 600 ${CODER_HARNESS_CONFIG_DIR}/.ssh/environment" <<EOF
+GH_TOKEN=${COPILOT_GITHUB_TOKEN:-}
+EOF
 
 echo "=> 检查配置目录 ${OPENCLAW_CONFIG_DIR} ..."
 ssh "$REMOTE_HOST" "
@@ -226,7 +232,7 @@ ssh "$REMOTE_HOST" "
     echo '   => 认证密钥对已存在，跳过生成 ...'
   fi
 "
-AUTH_PUB_KEY=$(ssh "$REMOTE_HOST" "cat ${OPENCLAW_CONFIG_DIR}/.ssh/auth.pub")
+OPENCLAW_PUB_KEY=$(ssh "$REMOTE_HOST" "cat ${OPENCLAW_CONFIG_DIR}/.ssh/auth.pub")
 ssh "$REMOTE_HOST" "
   cat <<EOF > ${OPENCLAW_CONFIG_DIR}/.ssh/config
 Host *
@@ -235,7 +241,7 @@ Host github.com
   HostName github.com
   User git
 Host coder-copilot
-  User coder
+  User root
 Host cdp_tunnel
   HostName 172.17.0.1
   User cdp_tunnel
@@ -247,7 +253,7 @@ AUTH_OPTIONS="restrict,port-forwarding,permitopen=\"127.0.0.1:9222\",command=\"e
 ssh -t "$REMOTE_HOST" "
   sudo bash ${DEPLOY_DIR}/create_ssh_user.sh \
     --server-user cdp_tunnel \
-    --public-key '${AUTH_PUB_KEY}' \
+    --public-key '${OPENCLAW_PUB_KEY}' \
     --auth-options '${AUTH_OPTIONS}' \
     --nologin
 "
@@ -262,12 +268,8 @@ OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
 CODER_HARNESS_CONFIG_DIR=${CODER_HARNESS_CONFIG_DIR}
 OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}
 PI_CODING_AGENT_DIR=${DEFAULT_AGENT_DIR}
-CODER_PUB_KEY='${AUTH_PUB_KEY}'
+OPENCLAW_PUB_KEY='${OPENCLAW_PUB_KEY}'
 OPENCLAW_TZ=${OPENCLAW_TZ:-UTC}
-COPILOT_PROVIDER_BASE_URL=http://litellm-gateway:8081/v1
-COPILOT_MODEL=${COPILOT_MODEL:-qwen3.6-plus}
-COPILOT_PROVIDER_MAX_PROMPT_TOKEN=${COPILOT_PROVIDER_MAX_PROMPT_TOKEN:-4096}
-COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=${COPILOT_PROVIDER_MAX_OUTPUT_TOKENS:-2048}
 
 OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
 COPILOT_GITHUB_TOKEN=${COPILOT_GITHUB_TOKEN:-}
@@ -278,7 +280,6 @@ FEISHU_APP_SECRET_CODER=${FEISHU_APP_SECRET_CODER:-}
 FEISHU_APP_ID_PLANNER=${FEISHU_APP_ID_PLANNER:-}
 FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
 LITELLM_API_KEY=${LITELLM_API_KEY:-}
-COPILOT_PROVIDER_API_KEY=${LITELLM_API_KEY:-}
 PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
 AGENT_SECRET_DB_PASSWORD=${AGENT_SECRET_DB_PASSWORD:-}
 EOF

@@ -100,7 +100,7 @@
           "KEEPASS_DB_PASS": "${AGENT_SECRET_DB_PASSWORD}"
         },
         "config": {
-          "dbPath": "~/.openclaw/workspace-shared/secrets.kdbx"
+          "dbPath": "~/.openclaw/secrets.kdbx"
         }
       }
     }

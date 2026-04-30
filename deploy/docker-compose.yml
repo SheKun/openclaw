@@ -4,15 +4,11 @@ services:
     image: ${CODER_COPILOT_IMAGE:-coder-copilot:latest}
     user: "root"
     environment:
-      CODER_PUB_KEY: ${CODER_PUB_KEY:-}
-      GH_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
-      COPILOT_PROVIDER_BASE_URL: ${COPILOT_PROVIDER_BASE_URL:-}
-      COPILOT_MODEL: ${COPILOT_MODEL:-}
-      COPILOT_PROVIDER_API_KEY: ${COPILOT_PROVIDER_API_KEY:-}
+      OPENCLAW_PUB_KEY: ${OPENCLAW_PUB_KEY:-}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}/projects:/projects
-      - ${CODER_HARNESS_CONFIG_DIR}/.ssh:/home/coder/.ssh
-      - ${CODER_HARNESS_CONFIG_DIR}/.copilot:/home/coder/.copilot
+      - ${CODER_HARNESS_CONFIG_DIR}/.ssh:/root/.ssh
+      - ${CODER_HARNESS_CONFIG_DIR}/.copilot:/root/.copilot
       - ./coder_entry.sh:/entrypoint.sh:ro
       - ./create_ssh_user.sh:/create_ssh_user.sh:ro
     init: true

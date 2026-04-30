@@ -13,6 +13,7 @@ Options:
     --server-user <name>           SSH service-side user (required)
     --public-key <value>           SSH public key content (required)
     --auth-options <value>         Full authorized_keys options prefix (optional)
+    --home <directory>             Set user home directory directly; skips mkdir (optional)
     --nologin                      Create/update user with nologin shell (optional)
 
     --help                         Show this help
@@ -30,6 +31,7 @@ set_option() {
         --server-user) SERVER_USER="$2" ;;
         --public-key) PUBLIC_KEY="$2" ;;
         --auth-options) AUTH_OPTIONS="$2" ;;
+        --home) HOME_DIR="$2" ;;
         *) die "未知参数: $1" ;;
     esac
 }
@@ -43,9 +45,10 @@ require_value() {
 SERVER_USER=""
 PUBLIC_KEY=""
 AUTH_OPTIONS=""
+HOME_DIR=""
 NOLOGIN_MODE="false"
 
-PARSED_ARGS=$(getopt -o h --long help,server-user:,public-key:,auth-options:,nologin -n create_ssh_user.sh -- "$@") \
+PARSED_ARGS=$(getopt -o h --long help,server-user:,public-key:,auth-options:,nologin,home: -n create_ssh_user.sh -- "$@") \
     || die "参数解析失败"
 eval set -- "$PARSED_ARGS"
 
@@ -55,7 +58,7 @@ while [[ $# -gt 0 ]]; do
             usage
             exit 0
             ;;
-        --server-user|--public-key|--auth-options)
+        --server-user|--public-key|--auth-options|--home)
             set_option "$1" "$2"
             shift 2
             ;;
@@ -113,18 +116,31 @@ ensure_user() {
     fi
 
     if id "$SERVER_USER" >/dev/null 2>&1; then
-        usermod -s "$TARGET_SHELL" "$SERVER_USER" >/dev/null || true
+        if [[ -n "$HOME_DIR" ]]; then
+            usermod -s "$TARGET_SHELL" -d "$HOME_DIR" "$SERVER_USER" >/dev/null || true
+        else
+            usermod -s "$TARGET_SHELL" "$SERVER_USER" >/dev/null || true
+        fi
     else
-        useradd -m -s "$TARGET_SHELL" "$SERVER_USER"
+        if [[ -n "$HOME_DIR" ]]; then
+            # -M: do not create/populate home dir (provided by volume mount), -d: register home path
+            useradd -M -d "$HOME_DIR" -s "$TARGET_SHELL" "$SERVER_USER"
+        else
+            useradd -m -s "$TARGET_SHELL" "$SERVER_USER"
+        fi
     fi
     passwd -l "$SERVER_USER" >/dev/null || true
 }
 
 ensure_user
-SERVER_HOME=$(getent passwd "$SERVER_USER" | cut -d: -f6)
-if [[ -z "$SERVER_HOME" ]]; then
-    echo "错误: 无法解析用户 ${SERVER_USER} 的 home 目录"
-    exit 1
+if [[ -n "$HOME_DIR" ]]; then
+    SERVER_HOME="$HOME_DIR"
+else
+    SERVER_HOME=$(getent passwd "$SERVER_USER" | cut -d: -f6)
+    if [[ -z "$SERVER_HOME" ]]; then
+        echo "错误: 无法解析用户 ${SERVER_USER} 的 home 目录"
+        exit 1
+    fi
 fi
 
 echo "=> 配置 SSH 公钥授权 ..."
@@ -155,6 +171,7 @@ echo "=================================================="
 echo "✅ SSH 用户 ${SERVER_USER} 配置完成！"
 echo "server_user: ${SERVER_USER}"
 echo "server_ssh_dir: ${SERVER_SSH_DIR}"
+echo "home_dir: ${SERVER_HOME}"
 echo "login_shell: ${TARGET_SHELL}"
 echo "nologin_mode: ${NOLOGIN_MODE}"
 echo "=================================================="
