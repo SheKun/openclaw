@@ -4,19 +4,18 @@ services:
     image: ${CODER_COPILOT_IMAGE:-coder-copilot:latest}
     user: "root"
     environment:
-      OPENCLAW_PUB_KEY: ${OPENCLAW_PUB_KEY:-}
+      GH_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}/projects:/projects
-      - ${CODER_HARNESS_CONFIG_DIR}/.ssh:/root/.ssh
       - ${CODER_HARNESS_CONFIG_DIR}/.copilot:/root/.copilot
       - ./coder_entry.sh:/entrypoint.sh:ro
-      - ./create_ssh_user.sh:/create_ssh_user.sh:ro
+    expose:
+      - "8765"
     init: true
     restart: unless-stopped
     entrypoint: ["/entrypoint.sh"]
     networks:
       - openclaw-internal
-      - local-llm-service
 
   openclaw-gateway:
     container_name: openclaw-gateway
@@ -42,7 +41,9 @@ services:
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ./start-gateway.sh:/usr/local/bin/start-gateway.sh:ro
-      - ./custom_acpx.sh:/usr/local/bin/custom_acpx.sh:ro
+      - ./acp_cmd.sh:/usr/local/bin/acp_cmd.sh:ro
+      - ./acp_tcp_proxy.js:/usr/local/bin/acp-tcp-proxy.js:ro
+      - ./acp_stdio_to_socket.js:/usr/local/bin/acp-stdio-to-socket.js:ro
       - ./myextensions:/home/node/.openclaw/extensions
       - apt_archives:/var/cache/apt/archives/
       - npm_archives:/root/.npm
