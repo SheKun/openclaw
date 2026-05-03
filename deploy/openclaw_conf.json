@@ -43,7 +43,7 @@
         "config": {
           "agents": {
             "copilot": {
-              "command": "/usr/local/bin/acp_cmd.sh"
+              "command": "/usr/local/bin/coder_acp_cmd.sh"
             }
           }
         }

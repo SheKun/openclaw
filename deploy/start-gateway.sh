@@ -23,14 +23,8 @@ rm -rf /home/node/.openclaw/browser/openclaw > /dev/null 2>&1
 # 加载 .env 中的环境变量（如果存在）
 [ -f ./.env ] && set -a && . ./.env && set +a
 
-ACP_PROXY_SOCKET="/tmp/coder-copilot-acp.sock"
-ACP_PROXY_SOCKET_ID_FILE="/tmp/coder-copilot-acp.socket-id"
-ACP_PROXY_STATUS_FILE="/tmp/coder-copilot-acp.status.json"
-ACP_PROXY_LOG="/tmp/coder-copilot-acp-proxy.log"
-ACP_PROXY_PID=""
-
 # 自动建立 CDP 隧道到宿主机 (用于访问宿主机的浏览器)
-echo "[start-gateway] 尝试建立 CDP 隧道至宿主机 ..."
+echo "[start-gateway] 尝试建立 CDP 隧道至宿主机 ($HOST_IP) ..."
 TUNNEL_PID=""
 if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o ExitOnForwardFailure=yes -o ConnectTimeout=8 \
@@ -49,36 +43,8 @@ then
 else
   echo "[start-gateway] 警告: 无法启动 CDP 隧道命令，将继续启动 gateway（不使用宿主机 CDP）。"
 fi
-echo "[start-gateway] 启动 coder-copilot ACP 长连接代理 ..."
-rm -f "$ACP_PROXY_SOCKET" "$ACP_PROXY_SOCKET_ID_FILE" "$ACP_PROXY_STATUS_FILE"
-node /usr/local/bin/acp-tcp-proxy.js "$ACP_PROXY_SOCKET" "$ACP_PROXY_SOCKET_ID_FILE" "$ACP_PROXY_STATUS_FILE" > "$ACP_PROXY_LOG" 2>&1 &
-ACP_PROXY_PID=$!
-
-for i in $(seq 1 20); do
-  if [ -s "$ACP_PROXY_SOCKET_ID_FILE" ] && [ -f "$ACP_PROXY_STATUS_FILE" ] && grep -q '"state":"ready"' "$ACP_PROXY_STATUS_FILE"; then
-    echo "[start-gateway] ACP 长连接代理已就绪（${i}s）"
-    break
-  fi
-  if ! kill -0 "$ACP_PROXY_PID" 2>/dev/null; then
-    echo "[start-gateway] 错误: ACP 长连接代理启动失败。" >&2
-    tail -n 200 "$ACP_PROXY_LOG" >&2 || true
-    exit 1
-  fi
-  sleep 1
-done
-
-if [ ! -s "$ACP_PROXY_SOCKET_ID_FILE" ] || [ ! -f "$ACP_PROXY_STATUS_FILE" ] || ! grep -q '"state":"ready"' "$ACP_PROXY_STATUS_FILE"; then
-  echo "[start-gateway] 错误: ACP 长连接代理未在预期时间内就绪。" >&2
-  [ -f "$ACP_PROXY_STATUS_FILE" ] && cat "$ACP_PROXY_STATUS_FILE" >&2 || true
-  tail -n 200 "$ACP_PROXY_LOG" >&2 || true
-  exit 1
-fi
-
-export CODER_COPILOT_SOCKET_ID_FILE="$ACP_PROXY_SOCKET_ID_FILE"
-export CODER_COPILOT_PROXY_STATUS_FILE="$ACP_PROXY_STATUS_FILE"
-
-# 当容器退出时，确保清理后台代理与 CDP 隧道
-trap '[ -n "$ACP_PROXY_PID" ] && kill "$ACP_PROXY_PID" 2>/dev/null || true; [ -n "$TUNNEL_PID" ] && kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
+# 当容器退出时，确保清理隧道进程
+trap '[ -n "$TUNNEL_PID" ] && kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
 
 # 自动安装并在配置中启用 /home/node/.openclaw/extensions 下的插件
 echo "[start-gateway] 检查并自动安装扩展插件 ..."

@@ -182,12 +182,10 @@ ssh "$REMOTE_HOST" "mkdir -p ${DEPLOY_DIR}"
 
 echo "=> 复制部署文件到远程服务器 ..."
 scp "${SCRIPT_DIR}/docker-compose.yml" "$REMOTE_HOST:${DEPLOY_DIR}/"
-cp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
-scp "${SCRIPT_DIR}/create_ssh_user.sh" "$REMOTE_HOST:${DEPLOY_DIR}/create_ssh_user.sh"
-scp "${SCRIPT_DIR}/acp_tcp_proxy.js" "$REMOTE_HOST:${DEPLOY_DIR}/acp_tcp_proxy.js"
-scp "${SCRIPT_DIR}/acp_stdio_to_socket.js" "$REMOTE_HOST:${DEPLOY_DIR}/acp_stdio_to_socket.js"
 scp "${SCRIPT_DIR}/coding_harness/copilot/coder_entry.sh" "$REMOTE_HOST:${DEPLOY_DIR}/coder_entry.sh"
-scp "${SCRIPT_DIR}/coding_harness/copilot/acp_cmd.sh" "$REMOTE_HOST:${DEPLOY_DIR}/acp_cmd.sh"
+scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
+scp "${SCRIPT_DIR}/create_ssh_user.sh" "$REMOTE_HOST:${DEPLOY_DIR}/create_ssh_user.sh"
+scp "${SCRIPT_DIR}/coding_harness/copilot/coder_acp_cmd.sh" "$REMOTE_HOST:${DEPLOY_DIR}/coder_acp_cmd.sh"
 ssh "$REMOTE_HOST" "chmod +x ${DEPLOY_DIR}/*.sh"
 
 echo "=> 检查coder harness配置目录 ${CODER_HARNESS_CONFIG_DIR} ..."
@@ -195,11 +193,20 @@ ssh "$REMOTE_HOST" "
   if [ ! -d ${CODER_HARNESS_CONFIG_DIR} ]; then
     echo '   => 创建 coder harness 配置目录 ...'
     mkdir -p ${CODER_HARNESS_CONFIG_DIR}
+    mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh
     mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.copilot
   else
     echo '   => coder harness 配置目录 ${CODER_HARNESS_CONFIG_DIR} 已存在，跳过创建 ...'
   fi
 "
+echo "=> 复制 coder harness 配置文件到 ${CODER_HARNESS_CONFIG_DIR} ..."
+scp ${COPILOT_HARNESS_DIR}/copilot-instructions.md "$REMOTE_HOST:${CODER_HARNESS_CONFIG_DIR}/copilot-instructions.md"
+
+echo "=> 生成 SSH environment 文件 (Copilot BYOK 变量，通过卷挂载注入容器) ..."
+ssh "$REMOTE_HOST" "mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh"
+ssh "$REMOTE_HOST" "cat > ${CODER_HARNESS_CONFIG_DIR}/.ssh/environment && chmod 600 ${CODER_HARNESS_CONFIG_DIR}/.ssh/environment" <<EOF
+GH_TOKEN=${COPILOT_GITHUB_TOKEN:-}
+EOF
 
 echo "=> 检查配置目录 ${OPENCLAW_CONFIG_DIR} ..."
 ssh "$REMOTE_HOST" "
@@ -207,7 +214,7 @@ ssh "$REMOTE_HOST" "
     echo '   => 创建配置目录并初始化 OpenClaw 配置 ...'
     mkdir -p ${OPENCLAW_CONFIG_DIR}
     mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh
-    mkdir -p ${OPENCLAW_CONFIG_DIR}/.gitconfig
+    mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh/sockets
     mkdir -p ${OPENCLAW_CONFIG_DIR}/projects
   else
     echo '   => 配置目录 ${OPENCLAW_CONFIG_DIR} 已存在，跳过创建 ...'
@@ -233,6 +240,11 @@ Host *
 Host github.com
   HostName github.com
   User git
+Host coder-copilot
+  User root
+  ControlMaster auto
+  ControlPath ~/.ssh/sockets/%r@%h:%p
+  ControlPersist yes
 Host cdp_tunnel
   HostName 172.17.0.1
   User cdp_tunnel
@@ -259,6 +271,7 @@ OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
 CODER_HARNESS_CONFIG_DIR=${CODER_HARNESS_CONFIG_DIR}
 OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}
 PI_CODING_AGENT_DIR=${DEFAULT_AGENT_DIR}
+OPENCLAW_PUB_KEY='${OPENCLAW_PUB_KEY}'
 OPENCLAW_TZ=${OPENCLAW_TZ:-UTC}
 
 OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
