@@ -16,7 +16,6 @@ services:
     entrypoint: ["/entrypoint.sh"]
     networks:
       - openclaw-internal
-      - local-llm-service
 
   openclaw-gateway:
     container_name: openclaw-gateway
