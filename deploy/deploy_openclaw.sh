@@ -30,7 +30,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202605060919"
+VERSION="${OPENCLAW_VERSION}-build202605061506"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 OPENCLAW_CONFIG_DIR="~/.openclaw"
 
@@ -98,9 +98,9 @@ else
   echo "=> 构建日志将保存至: ${BUILD_LOG}"
   docker build --progress=plain --provenance=false \
     --build-arg "OPENCLAW_INSTALL_BROWSER=1" \
-    --build-arg "OPENCLAW_EXTENSIONS=feishu llm-task lobster" \
-    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd@latest @clawdbot/lobster@latest clawhub" \
-    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=keepassxc jq ripgrep" \
+    --build-arg "OPENCLAW_EXTENSIONS=feishu llm-task lobster acpx" \
+    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd @clawdbot/lobster clawhub" \
+    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=keepassxc jq ripgrep openssh-client" \
     -t "${IMAGE_NAME}" -f Dockerfile . 2>&1 | tee "${BUILD_LOG}"
 fi
 
@@ -305,21 +305,54 @@ echo "   => 连通性检查通过。"
 
 echo '=> 同步自定义插件 ...'
 CUSTOM_EXTENSIONS_DIR="${SCRIPT_DIR}/myextensions"
-CUSTOM_EXTENSIONS="guidance" # 这里可以添加更多自定义插件名称，空格分隔
-if [ -n "$CUSTOM_EXTENSIONS" ]; then
-  ssh "$REMOTE_HOST" "mkdir -p ${DEPLOY_DIR}/myextensions && find ${DEPLOY_DIR}/myextensions -mindepth 1 -maxdepth 1 -exec rm -rf {} +"
-  echo "   -> 已清空远程目录 ${DEPLOY_DIR}/myextensions 中的现有插件。"
-  for ext in $CUSTOM_EXTENSIONS; do
-    if [ -d "${CUSTOM_EXTENSIONS_DIR}/$ext" ]; then
-      echo "   -> 正在同步扩展: $ext ..."
-      # 使用 tar 保持目录结构上传到远程 extensions
-      tar -C "${CUSTOM_EXTENSIONS_DIR}" -cz "$ext" | ssh "$REMOTE_HOST" "tar -C ${DEPLOY_DIR}/myextensions -xz"
-    else
-      echo "   ⚠️ 警告: 找不到本地扩展目录 ${CUSTOM_EXTENSIONS_DIR}/$ext，跳过。"
+CUSTOM_EXTENSIONS=("guidance") # 这里可以添加更多自定义插件名称
+CUSTOM_EXTENSIONS_ARTIFACT_DIR="${CUSTOM_EXTENSIONS_DIR}/dist"
+if [ "${#CUSTOM_EXTENSIONS[@]}" -gt 0 ]; then
+  if ! command -v pnpm >/dev/null 2>&1; then
+    echo "❌ 错误: 未找到 pnpm，无法编译自定义插件。"
+    exit 1
+  fi
+
+  rm -rf "$CUSTOM_EXTENSIONS_ARTIFACT_DIR"
+  mkdir -p "$CUSTOM_EXTENSIONS_ARTIFACT_DIR"
+
+  echo "   -> 编译并打包自定义插件..."
+  ssh "$REMOTE_HOST" "
+    mkdir -p ${DEPLOY_DIR}/myextensions && \
+    find ${DEPLOY_DIR}/myextensions -mindepth 1 -maxdepth 1 -exec rm -rf {} +\
+  "
+  rm -rf "${CUSTOM_EXTENSIONS_ARTIFACT_DIR}"/*
+  mkdir -p "${CUSTOM_EXTENSIONS_ARTIFACT_DIR}"
+  for ext in "${CUSTOM_EXTENSIONS[@]}"; do
+    EXT_SRC_DIR="${CUSTOM_EXTENSIONS_DIR}/$ext"
+    if [ ! -d "$EXT_SRC_DIR" ]; then
+      echo "   ⚠️ 警告: 找不到本地扩展目录 ${EXT_SRC_DIR}，跳过编译。"
+      continue
     fi
+    if [ ! -f "$EXT_SRC_DIR/package.json" ]; then
+      echo "   ⚠️ 警告: 扩展 ${ext} 缺少 package.json，跳过编译。"
+      continue
+    fi
+
+    rm -rf "$EXT_SRC_DIR/dist"
+    mkdir -p "$EXT_SRC_DIR/dist"
+    (
+      echo "      - 编译 ${ext} -> dist"
+      cd "$EXT_SRC_DIR"
+      pnpm exec tsc --ignoreConfig index.ts \
+        --module esnext \
+        --moduleResolution bundler \
+        --target es2022 \
+        --outDir dist \
+        --declaration false \
+        --sourceMap false \
+        --skipLibCheck \
+        --noCheck
+      PACKED=$(pnpm pack --pack-destination "${CUSTOM_EXTENSIONS_ARTIFACT_DIR}" 2>/dev/null | tail -1)
+      echo "      - 同步 $(basename "$PACKED") 到远程服务器 ..."
+      scp "$PACKED" "$REMOTE_HOST:${DEPLOY_DIR}/myextensions/"
+    )
   done
-else
-  echo "   -> 未配置自定义插件同步。"
 fi
 
 echo '=> 重新启动 openclaw-gateway 容器 ...'
@@ -368,7 +401,6 @@ echo "▶ 4. 建立 CDP 浏览器隧道 (可选)"
 echo "如果你希望在宿主机上运行 Chrome 浏览器并让容器访问，请在服务器上运行："
 echo "   google-chrome --remote-debugging-port=9222" 
 echo "                 --user-data-dir=/tmp/openclaw-chrome"
-echo "                 --rremote-allow-origins=\"*\""
+echo "                 --remote-allow-origins=\"*\""
 echo "                 --log-level=3"
-echo "该脚本会创建隧道账号 cdp_tunnel 并自动配置 SSH 密钥，容器重启后会自动建立隧道。"
 echo "----------------------------------------------------"

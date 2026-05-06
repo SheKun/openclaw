@@ -50,17 +50,13 @@ trap '[ -n "$TUNNEL_PID" ] && kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
 echo "[start-gateway] 检查并自动安装扩展插件 ..."
 EXTENSIONS_ROOT="/home/node/.openclaw/extensions"
 if [ -d "$EXTENSIONS_ROOT" ]; then
-  for ext_dir in "$EXTENSIONS_ROOT"/*; do
-    if [ -d "$ext_dir" ]; then
-      if [ ! -f "$ext_dir/package.json" ]; then
-        echo "[start-gateway]   -> 跳过目录（未找到 package.json）: $(basename "$ext_dir")"
-        continue
-      fi
-
-      ext_name=$(basename "$ext_dir")
-      echo "[start-gateway]   -> 注册并启用插件: $ext_name ..."
-      # 使用 openclaw.mjs 直接执行，确保在网关启动前完成配置
-      node openclaw.mjs plugins install "$ext_dir" > /dev/null 2>&1 || true
+  for ext_path in "$EXTENSIONS_ROOT"/*; do
+    [ -e "$ext_path" ] || continue
+    if [ -f "$ext_path" ] && [ "${ext_path##*.}" = "tgz" ]; then
+      ext_name=$(basename "$ext_path")
+      ext_name="${ext_name%.tgz}"
+      echo "[start-gateway]   -> 注册并启用插件工件: $ext_name ..."
+      node openclaw.mjs plugins install "$ext_path" > /dev/null 2>&1 || true
       node openclaw.mjs plugins enable "$ext_name" > /dev/null 2>&1 || true
     fi
   done

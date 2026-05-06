@@ -77,12 +77,11 @@
       "healthcheck",
       "node-connect",
       "session-logs",
-
       "clawhub",
       "skill-creator",
       "taskflow",
-
-      "weather"
+      "weather",
+      "obsidian"
     ],
     "load": {
       "extraDirs": ["~/.openclaw/workspace-shared/skills"],
@@ -130,7 +129,9 @@
   },
   "acp": {
     "enabled": true,
-    "dispatch": { "enabled": true },
+    "dispatch": {
+      "enabled": true
+    },
     "backend": "acpx",
     "defaultAgent": "copilot",
     "allowedAgents": ["copilot"],
@@ -244,7 +245,10 @@
           "node-connect",
           "keepassxc",
           "session-logs",
-          "weather"
+          "weather",
+          "github",
+          "obsidian",
+          "wiki-create"
         ]
       },
       {
@@ -268,12 +272,28 @@
         "agentDir": "~/.openclaw/agents/planner/agent",
         "model": "litellm/qwen3.6-flash",
         "subagents": {
+          "allowAgents": ["crawler"]
+        },
+        "tools": {
+          "profile": "minimal",
+          "alsoAllow": ["group:fs", "group:sessions", "group:memory", "group:agents"]
+        },
+        "skills": ["wiki-create", "weather"]
+      },
+      {
+        "id": "crawler",
+        "name": "Spider",
+        "workspace": "~/.openclaw/workspace-crawler",
+        "agentDir": "~/.openclaw/agents/crawler/agent",
+        "model": "litellm/qwen3.6-flash",
+        "subagents": {
           "allowAgents": []
         },
         "tools": {
-          "profile": "full"
+          "profile": "minimal",
+          "alsoAllow": ["browser", "group:web"]
         },
-        "skills": ["ctrip-travel-search"]
+        "skills": ["browser-automation", "wiki-create", "ctrip-travel-search"]
       }
     ]
   },
@@ -291,7 +311,10 @@
       "match": {
         "channel": "feishu",
         "accountId": "coder",
-        "peer": { "kind": "dm", "id": "ou_8b8d96a3c236372093e2717c879ccaad" }
+        "peer": {
+          "kind": "dm",
+          "id": "ou_8b8d96a3c236372093e2717c879ccaad"
+        }
       }
     },
     {

@@ -10,8 +10,11 @@ const { mockOpenFileWithinRoot } = vi.hoisted(() => ({
   mockOpenFileWithinRoot: vi.fn(),
 }));
 
-vi.mock("openclaw/plugin-sdk/browser-support", () => ({
+vi.mock("openclaw/plugin-sdk/setup-tools", () => ({
   CONFIG_DIR: "/home/node/.openclaw",
+}));
+
+vi.mock("openclaw/plugin-sdk/security-runtime", () => ({
   openFileWithinRoot: mockOpenFileWithinRoot,
 }));
 

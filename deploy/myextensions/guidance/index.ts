@@ -1,7 +1,8 @@
 import path from "node:path";
-import { CONFIG_DIR, openFileWithinRoot } from "openclaw/plugin-sdk/browser-support";
 import { buildPluginConfigSchema, delegateCompactionToRuntime } from "openclaw/plugin-sdk/core";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+import { openFileWithinRoot } from "openclaw/plugin-sdk/security-runtime";
+import { CONFIG_DIR } from "openclaw/plugin-sdk/setup-tools";
 import { z } from "openclaw/plugin-sdk/zod";
 
 const configZodSchema = z.object({
