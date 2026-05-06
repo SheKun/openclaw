@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parseByteSize } from "../cli/parse-bytes.js";
@@ -7,7 +9,14 @@ import {
   normalizeOptionalString,
   normalizeStringifiedOptionalString,
 } from "../shared/string-coerce.js";
-import type { CronDeliveryStatus, CronRunStatus, CronRunTelemetry } from "./types.js";
+import { normalizeCronRunDiagnostics } from "./run-diagnostics.js";
+import type {
+  CronDeliveryStatus,
+  CronDeliveryTrace,
+  CronRunDiagnostics,
+  CronRunStatus,
+  CronRunTelemetry,
+} from "./types.js";
 
 export type CronRunLogEntry = {
   ts: number;
@@ -16,20 +25,23 @@ export type CronRunLogEntry = {
   status?: CronRunStatus;
   error?: string;
   summary?: string;
+  diagnostics?: CronRunDiagnostics;
   delivered?: boolean;
   deliveryStatus?: CronDeliveryStatus;
   deliveryError?: string;
+  delivery?: CronDeliveryTrace;
   sessionId?: string;
   sessionKey?: string;
+  runId?: string;
   runAtMs?: number;
   durationMs?: number;
   nextRunAtMs?: number;
 } & CronRunTelemetry;
 
-export type CronRunLogSortDir = "asc" | "desc";
-export type CronRunLogStatusFilter = "all" | "ok" | "error" | "skipped";
+type CronRunLogSortDir = "asc" | "desc";
+type CronRunLogStatusFilter = "all" | "ok" | "error" | "skipped";
 
-export type ReadCronRunLogPageOptions = {
+type ReadCronRunLogPageOptions = {
   limit?: number;
   offset?: number;
   jobId?: string;
@@ -41,7 +53,7 @@ export type ReadCronRunLogPageOptions = {
   sortDir?: CronRunLogSortDir;
 };
 
-export type CronRunLogPageResult = {
+type CronRunLogPageResult = {
   entries: CronRunLogEntry[];
   total: number;
   offset: number;
@@ -135,7 +147,6 @@ async function pruneIfNeeded(filePath: string, opts: { maxBytes: number; keepLin
     .map((l) => l.trim())
     .filter(Boolean);
   const kept = lines.slice(Math.max(0, lines.length - opts.keepLines));
-  const { randomBytes } = await import("node:crypto");
   const tmp = `${filePath}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
   await fs.writeFile(tmp, `${kept.join("\n")}\n`, { encoding: "utf-8", mode: 0o600 });
   await setSecureFileMode(tmp);
@@ -190,6 +201,23 @@ export async function readCronRunLogEntries(
     sortDir: "desc",
   });
   return page.entries.toReversed();
+}
+
+export function readCronRunLogEntriesSync(
+  filePath: string,
+  opts?: { limit?: number; jobId?: string },
+): CronRunLogEntry[] {
+  const limit = Math.max(1, Math.min(5000, Math.floor(opts?.limit ?? 200)));
+  let raw: string;
+  try {
+    raw = fsSync.readFileSync(path.resolve(filePath), "utf-8");
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+  return parseAllRunLogEntries(raw, { jobId: opts?.jobId }).slice(-limit);
 }
 
 function normalizeRunStatusFilter(status?: string): CronRunLogStatusFilter {
@@ -286,6 +314,8 @@ function parseAllRunLogEntries(raw: string, opts?: { jobId?: string }): CronRunL
         status: obj.status,
         error: obj.error,
         summary: obj.summary,
+        runId: typeof obj.runId === "string" && obj.runId.trim() ? obj.runId : undefined,
+        diagnostics: normalizeCronRunDiagnostics(obj.diagnostics),
         runAtMs: obj.runAtMs,
         durationMs: obj.durationMs,
         nextRunAtMs: obj.nextRunAtMs,
@@ -318,6 +348,9 @@ function parseAllRunLogEntries(raw: string, opts?: { jobId?: string }): CronRunL
       }
       if (typeof obj.deliveryError === "string") {
         entry.deliveryError = obj.deliveryError;
+      }
+      if (obj.delivery && typeof obj.delivery === "object") {
+        entry.delivery = obj.delivery;
       }
       if (typeof obj.sessionId === "string" && obj.sessionId.trim().length > 0) {
         entry.sessionId = obj.sessionId;
@@ -375,7 +408,17 @@ export async function readCronRunLogEntriesPage(
     statuses,
     deliveryStatuses,
     query,
-    queryTextForEntry: (entry) => [entry.summary ?? "", entry.error ?? "", entry.jobId].join(" "),
+    queryTextForEntry: (entry) =>
+      [
+        entry.summary ?? "",
+        entry.error ?? "",
+        entry.diagnostics?.summary ?? "",
+        ...(entry.diagnostics?.entries ?? []).map((diagnostic) => diagnostic.message),
+        entry.jobId,
+        entry.delivery?.intended?.channel ?? "",
+        entry.delivery?.resolved?.channel ?? "",
+        ...(entry.delivery?.messageToolSentTo ?? []).map((target) => target.channel),
+      ].join(" "),
   });
   const sorted =
     sortDir === "asc"
@@ -432,7 +475,17 @@ export async function readCronRunLogEntriesPageAll(
     query,
     queryTextForEntry: (entry) => {
       const jobName = opts.jobNameById?.[entry.jobId] ?? "";
-      return [entry.summary ?? "", entry.error ?? "", entry.jobId, jobName].join(" ");
+      return [
+        entry.summary ?? "",
+        entry.error ?? "",
+        entry.diagnostics?.summary ?? "",
+        ...(entry.diagnostics?.entries ?? []).map((diagnostic) => diagnostic.message),
+        entry.jobId,
+        jobName,
+        entry.delivery?.intended?.channel ?? "",
+        entry.delivery?.resolved?.channel ?? "",
+        ...(entry.delivery?.messageToolSentTo ?? []).map((target) => target.channel),
+      ].join(" ");
     },
   });
   const sorted =

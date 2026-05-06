@@ -1,8 +1,11 @@
 import { collectUniqueCommandDescriptors } from "../cli/program/command-descriptor-utils.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { normalizeLowercaseStringOrEmpty } from "../shared/string-coerce.js";
 import { resolveManifestActivationPluginIds } from "./activation-planner.js";
+import { createPluginCliGatewayNodesRuntime } from "./cli-gateway-nodes-runtime.js";
 import type { PluginLoadOptions } from "./loader.js";
 import { loadOpenClawPluginCliRegistry, loadOpenClawPlugins } from "./loader.js";
+import { createEmptyPluginRegistry } from "./registry-empty.js";
 import type { PluginRegistry } from "./registry.js";
 import {
   buildPluginRuntimeLoadOptions,
@@ -47,47 +50,29 @@ function resolvePluginCliLogger(logger?: PluginLogger): PluginLogger {
   return logger ?? createPluginCliLogger();
 }
 
-function hasIgnoredAsyncPluginRegistration(registry: PluginRegistry): boolean {
-  return (registry.diagnostics ?? []).some(
-    (entry) =>
-      entry.message === "plugin register returned a promise; async registration is ignored",
-  );
-}
-
-function mergeCliRegistrars(params: {
-  runtimeRegistry: PluginRegistry;
-  metadataRegistry: PluginRegistry;
-}): PluginRegistry["cliRegistrars"] {
-  const runtimeCommands = new Set(
-    params.runtimeRegistry.cliRegistrars.flatMap((entry) => entry.commands),
-  );
-  return [
-    ...params.runtimeRegistry.cliRegistrars,
-    ...params.metadataRegistry.cliRegistrars.filter(
-      (entry) => !entry.commands.some((command) => runtimeCommands.has(command)),
-    ),
-  ];
-}
-
 function buildPluginCliLoaderParams(
   context: PluginCliLoadContext,
   params?: { primaryCommand?: string },
   loaderOptions?: PluginCliLoaderOptions,
 ) {
-  const onlyPluginIds = resolvePrimaryCommandPluginIds(context, params?.primaryCommand);
+  const onlyPluginIds = resolvePrimaryCommandManifestPluginIds(context, params?.primaryCommand);
   return buildPluginRuntimeLoadOptions(context, {
     ...loaderOptions,
-    ...(onlyPluginIds.length > 0 ? { onlyPluginIds } : {}),
+    ...(onlyPluginIds && onlyPluginIds.length > 0 ? { onlyPluginIds } : {}),
   });
 }
 
-function resolvePrimaryCommandPluginIds(
+function normalizePluginCliRootName(value: string | undefined): string {
+  return normalizeLowercaseStringOrEmpty(value);
+}
+
+function resolvePrimaryCommandManifestPluginIds(
   context: PluginCliLoadContext,
   primaryCommand: string | undefined,
-): string[] {
-  const normalizedPrimary = primaryCommand?.trim();
+): string[] | undefined {
+  const normalizedPrimary = normalizePluginCliRootName(primaryCommand);
   if (!normalizedPrimary) {
-    return [];
+    return undefined;
   }
   return resolveManifestActivationPluginIds({
     trigger: {
@@ -98,6 +83,47 @@ function resolvePrimaryCommandPluginIds(
     workspaceDir: context.workspaceDir,
     env: context.env,
   });
+}
+
+function listPluginCliRootOwnerIds(registry: PluginRegistry, primaryCommand: string): string[] {
+  const normalizedPrimary = normalizePluginCliRootName(primaryCommand);
+  if (!normalizedPrimary) {
+    return [];
+  }
+  return [
+    ...new Set(
+      registry.cliRegistrars
+        .filter((entry) => {
+          const roots = [
+            ...entry.commands,
+            ...entry.descriptors.map((descriptor) => descriptor.name),
+          ].map(normalizePluginCliRootName);
+          return roots.includes(normalizedPrimary);
+        })
+        .map((entry) => entry.pluginId),
+    ),
+  ];
+}
+
+async function resolvePrimaryCommandPluginIds(
+  context: PluginCliLoadContext,
+  primaryCommand: string | undefined,
+  loaderOptions?: PluginCliLoaderOptions,
+): Promise<string[] | undefined> {
+  const normalizedPrimary = normalizePluginCliRootName(primaryCommand);
+  if (!normalizedPrimary) {
+    return undefined;
+  }
+  const manifestPluginIds = resolvePrimaryCommandManifestPluginIds(context, normalizedPrimary);
+  if (manifestPluginIds && manifestPluginIds.length > 0) {
+    return manifestPluginIds;
+  }
+  const { registry } = await loadPluginCliMetadataRegistryWithContext(
+    context,
+    { primaryCommand: normalizedPrimary },
+    loaderOptions,
+  );
+  return listPluginCliRootOwnerIds(registry, normalizedPrimary);
 }
 
 export function resolvePluginCliLoadContext(params: {
@@ -129,48 +155,37 @@ export async function loadPluginCliCommandRegistryWithContext(params: {
   context: PluginCliLoadContext;
   primaryCommand?: string;
   loaderOptions?: PluginCliLoaderOptions;
-  onMetadataFallbackError: (error: unknown) => void;
 }): Promise<PluginCliRegistryLoadResult> {
-  const runtimeRegistry = loadOpenClawPlugins(
-    buildPluginCliLoaderParams(
-      params.context,
-      { primaryCommand: params.primaryCommand },
-      params.loaderOptions,
-    ),
-  );
-
-  if (!hasIgnoredAsyncPluginRegistration(runtimeRegistry)) {
-    return {
-      ...params.context,
-      registry: runtimeRegistry,
-    };
-  }
-
+  let onlyPluginIds: string[] | undefined;
   try {
-    const metadataRegistry = await loadOpenClawPluginCliRegistry(
-      buildPluginCliLoaderParams(
-        params.context,
-        { primaryCommand: params.primaryCommand },
-        params.loaderOptions,
-      ),
+    onlyPluginIds = await resolvePrimaryCommandPluginIds(
+      params.context,
+      params.primaryCommand,
+      params.loaderOptions,
     );
+  } catch {
+    onlyPluginIds = resolvePrimaryCommandManifestPluginIds(params.context, params.primaryCommand);
+  }
+  if (onlyPluginIds && onlyPluginIds.length === 0) {
     return {
       ...params.context,
-      registry: {
-        ...runtimeRegistry,
-        cliRegistrars: mergeCliRegistrars({
-          runtimeRegistry,
-          metadataRegistry,
-        }),
-      },
-    };
-  } catch (error) {
-    params.onMetadataFallbackError(error);
-    return {
-      ...params.context,
-      registry: runtimeRegistry,
+      registry: createEmptyPluginRegistry(),
     };
   }
+  return {
+    ...params.context,
+    registry: loadOpenClawPlugins(
+      buildPluginRuntimeLoadOptions(params.context, {
+        ...params.loaderOptions,
+        ...(onlyPluginIds && onlyPluginIds.length > 0 ? { onlyPluginIds } : {}),
+        activate: false,
+        cache: false,
+        runtimeOptions: {
+          nodes: createPluginCliGatewayNodesRuntime(),
+        },
+      }),
+    ),
+  };
 }
 
 function buildPluginCliCommandGroupEntries(params: {
@@ -192,10 +207,6 @@ function buildPluginCliCommandGroupEntries(params: {
       });
     },
   }));
-}
-
-function logPluginCliMetadataFallbackError(logger: PluginLogger, error: unknown) {
-  logger.warn(`plugin CLI metadata fallback failed: ${String(error)}`);
 }
 
 export async function loadPluginCliDescriptors(
@@ -227,7 +238,6 @@ export async function loadPluginCliRegistrationEntries(params: {
   loaderOptions?: PluginCliLoaderOptions;
   logger?: PluginLogger;
   primaryCommand?: string;
-  onMetadataFallbackError: (error: unknown) => void;
 }): Promise<PluginCliCommandGroupEntry[]> {
   const resolvedLogger = resolvePluginCliLogger(params.logger);
   const context = resolvePluginCliLoadContext({
@@ -239,7 +249,6 @@ export async function loadPluginCliRegistrationEntries(params: {
     context,
     primaryCommand: params.primaryCommand,
     loaderOptions: params.loaderOptions,
-    onMetadataFallbackError: params.onMetadataFallbackError,
   });
   return buildPluginCliCommandGroupEntries({
     registry,
@@ -249,6 +258,24 @@ export async function loadPluginCliRegistrationEntries(params: {
   });
 }
 
+export async function resolvePluginCliRootOwnerIds(
+  params: PluginCliPublicLoadParams,
+): Promise<string[] | null> {
+  const primaryCommand = normalizePluginCliRootName(params.primaryCommand);
+  if (!primaryCommand) {
+    return null;
+  }
+  const logger = resolvePluginCliLogger(params.logger);
+  const context = resolvePluginCliLoadContext({
+    cfg: params.cfg,
+    env: params.env,
+    logger,
+  });
+  return (
+    (await resolvePrimaryCommandPluginIds(context, primaryCommand, params.loaderOptions)) ?? null
+  );
+}
+
 export async function loadPluginCliRegistrationEntriesWithDefaults(
   params: PluginCliPublicLoadParams,
 ): Promise<PluginCliCommandGroupEntry[]> {
@@ -256,8 +283,5 @@ export async function loadPluginCliRegistrationEntriesWithDefaults(
   return loadPluginCliRegistrationEntries({
     ...params,
     logger,
-    onMetadataFallbackError: (error) => {
-      logPluginCliMetadataFallbackError(logger, error);
-    },
   });
 }
