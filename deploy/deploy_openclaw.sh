@@ -30,7 +30,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202604230912"
+VERSION="${OPENCLAW_VERSION}-build202605060919"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 OPENCLAW_CONFIG_DIR="~/.openclaw"
 
