@@ -33,6 +33,21 @@
       "active-memory"
     ],
     "entries": {
+      "browser": {
+        "enabled": true
+      },
+      "feishu": {
+        "enabled": true
+      },
+      "lobster": {
+        "enabled": true
+      },
+      "open-prose": {
+        "enabled": true
+      },
+      "document-extract": {
+        "enabled": true
+      },
       "memory-core": {
         "enabled": true,
         "config": {
@@ -84,6 +99,7 @@
         }
       },
       "guidance": {
+        "enabled": true,
         "config": {
           "files": [
             "workspace-shared/AGENTS.md",
@@ -98,6 +114,10 @@
       "memory": "memory-core",
       "contextEngine": "guidance"
     }
+  },
+  "commitments": {
+    "enabled": true,
+    "maxPerDay": 3
   },
   "skills": {
     "allowBundled": [
