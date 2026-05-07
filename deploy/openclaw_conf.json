@@ -29,7 +29,8 @@
       "acpx",
       "perplexity",
       "document-extract",
-      "memory-core"
+      "memory-core",
+      "active-memory"
     ],
     "entries": {
       "memory-core": {
@@ -38,6 +39,21 @@
           "dreaming": {
             "enabled": true
           }
+        }
+      },
+      "active-memory": {
+        "enabled": true,
+        "config": {
+          "agents": ["steward"],
+          "model": "litellm/qwen3.6-flash",
+          "queryMode": "recent",
+          "promptStyle": "balanced",
+          "timeoutMs": 15000,
+          "maxSummaryChars": 220,
+          "allowedChatTypes": ["direct"],
+          "logging": true,
+          "persistTranscripts": true,
+          "transcriptDir": "active-memory"
         }
       },
       "llm-task": {
