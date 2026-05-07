@@ -16,19 +16,29 @@
     }
   },
   "memory": {
-    "backend": "qmd"
+    "backend": "builtin"
   },
   "plugins": {
-    "allow": ["browser", "feishu", "lobster", "open-prose", "llm-task", "guidance", "acpx"],
+    "allow": [
+      "browser",
+      "feishu",
+      "lobster",
+      "open-prose",
+      "llm-task",
+      "guidance",
+      "acpx",
+      "perplexity",
+      "document-extract",
+      "memory-core"
+    ],
     "entries": {
-      "feishu": {
-        "enabled": true
-      },
-      "lobster": {
-        "enabled": true
-      },
-      "open-prose": {
-        "enabled": true
+      "memory-core": {
+        "enabled": true,
+        "config": {
+          "dreaming": {
+            "enabled": true
+          }
+        }
       },
       "llm-task": {
         "enabled": true,
@@ -69,7 +79,8 @@
       }
     },
     "slots": {
-      "contextEngine": "public-guidance"
+      "memory": "memory-core",
+      "contextEngine": "guidance"
     }
   },
   "skills": {
@@ -206,13 +217,30 @@
         "mode": "cache-ttl",
         "ttl": "20m"
       },
+      "memorySearch": {
+        "enabled": true,
+        "provider": "openai",
+        "model": "text-embedding-v4",
+        "fallback": "none",
+        "query": {
+          "hybrid": {
+            "mmr": {
+              "enabled": true
+            },
+            "temporalDecay": {
+              "enabled": true
+            }
+          }
+        }
+      },
       "compaction": {
         "reserveTokensFloor": 20000,
-        "model": "litellm/qwen3.6-plus",
+        "model": "litellm/qwen3.6-flash",
+        "notifyUser": true,
         "memoryFlush": {
           "enabled": true,
           "softThresholdTokens": 10000,
-          "prompt": "Write user's preferences, habits you just learned to MEMORY.md and other import facts to memory/YYYY-MM-DD.md. Reply with NO_REPLY if nothing to store.",
+          "prompt": "Write down: - info and preference about the user\n- correction to my behavior by user\n- subjects or tasks with multiple interactions\n -Other you think important to remember\nBe concise but informative.",
           "systemPrompt": "This chat is about to end. Summarize them in a few words and write them down."
         }
       },
@@ -400,6 +428,18 @@
             "input": ["text", "image"],
             "contextWindow": 262144,
             "maxTokens": 258048
+          }
+        ]
+      },
+      "openai": {
+        "baseUrl": "http://litellm-gateway:8081/v1",
+        "apiKey": "${LITELLM_API_KEY}",
+        "models": [
+          {
+            "id": "text-embedding-v4",
+            "name": "Text Embedding V4",
+            "input": ["text"],
+            "maxTokens": 81920
           }
         ]
       }
