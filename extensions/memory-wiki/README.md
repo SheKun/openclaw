@@ -24,6 +24,7 @@ Put config under `plugins.entries.memory-wiki.config`:
 
   vault: {
     path: "~/.openclaw/wiki/main",
+    perAgent: false, // when true, each agent has a dedicated wiki vault at `<path>/<agent-id>`
     renderMode: "obsidian", // or "native"
   },
 
@@ -102,33 +103,40 @@ When `render.createDashboards` is enabled, compile also maintains report dashboa
 ## CLI
 
 ```bash
-openclaw wiki status
-openclaw wiki doctor
-openclaw wiki init
-openclaw wiki ingest ./notes/alpha.md
-openclaw wiki compile
-openclaw wiki lint
-openclaw wiki search "alpha"
-openclaw wiki get entity.alpha --from 1 --lines 80
+openclaw wiki status [--agent <agent_id>]
+openclaw wiki doctor [--agent <agent_id>]
+openclaw wiki init [--agent <agent_id>]
+openclaw wiki ingest ./notes/alpha.md [--agent <agent_id>]
+openclaw wiki compile [--agent <agent_id>]
+openclaw wiki lint [--agent <agent_id>]
+openclaw wiki search "alpha" [--agent <agent_id>]
+openclaw wiki get entity.alpha --from 1 --lines 80 [--agent <agent_id>]
 
 openclaw wiki apply synthesis "Alpha Summary" \
+  [--agent <agent_id>] \
   --body "Short synthesis body" \
   --source-id source.alpha
 
 openclaw wiki apply metadata entity.alpha \
+  [--agent <agent_id>] \
   --source-id source.alpha \
   --status review \
   --question "Still active?"
 
-openclaw wiki bridge import
-openclaw wiki unsafe-local import
+openclaw wiki bridge import [--agent <agent_id>]
+openclaw wiki unsafe-local import [--agent <agent_id>]
 
 openclaw wiki obsidian status
-openclaw wiki obsidian search "alpha"
-openclaw wiki obsidian open syntheses/alpha-summary.md
-openclaw wiki obsidian command workspace:quick-switcher
-openclaw wiki obsidian daily
+openclaw wiki obsidian search "alpha" [--agent <agent_id>]
+openclaw wiki obsidian open syntheses/alpha-summary.md [--agent <agent_id>]
+openclaw wiki obsidian command workspace:quick-switcher [--agent <agent_id>]
+openclaw wiki obsidian daily [--agent <agent_id>]
 ```
+
+**note**:
+
+- Vault-scoped CLI commands accept `--agent <agent_id>` to target a specific agent vault when `vault.perAgent=true`. When `vault.perAgent=false`, the parameter is ignored.
+- `openclaw wiki obsidian status` does not take `--agent` because it only probes whether the local Obsidian CLI is available on `PATH`; it does not operate on a vault.
 
 ## Agent tools
 
@@ -172,6 +180,8 @@ Write methods:
 
 - `unsafe-local` is intentionally experimental and non-portable.
 - Bridge mode reads the active memory plugin through public seams only.
+- When `vault.perAgent` enabled, runtime routing resolves the agent identity from explicit `agent` or session context, then scopes `vault.path` to `<base>/<agent-id>`.
+- When `vault.perAgent=true` and no agent identity is available, falls back to `<base>` to keep deterministic behavior.
 - Wiki pages are compiled artifacts, not the ultimate source of truth. Keep provenance attached to raw sources, memory artifacts, and daily notes.
 - The compiled agent digests in `.openclaw-wiki/cache/agent-digest.json` and `.openclaw-wiki/cache/claims.jsonl` are the stable machine-facing view of the wiki.
 - Obsidian CLI support requires the official `obsidian` CLI to be installed and available on `PATH`.

@@ -126,6 +126,8 @@ The setup script accepts these optional environment variables:
 | ------------------------------------------ | --------------------------------------------------------------- |
 | `OPENCLAW_IMAGE`                           | Use a remote image instead of building locally                  |
 | `OPENCLAW_DOCKER_APT_PACKAGES`             | Install extra apt packages during build (space-separated)       |
+| `OPENCLAW_DOCKER_APT_SOURCES_FILE`         | Mount a custom Debian `.sources` file into BuildKit apt steps   |
+| `OPENCLAW_DOCKER_NPMRC_FILE`               | Mount a custom `.npmrc` into BuildKit npm/pnpm/corepack steps   |
 | `OPENCLAW_EXTENSIONS`                      | Include selected bundled plugin helpers at build time           |
 | `OPENCLAW_EXTRA_MOUNTS`                    | Extra host bind mounts (comma-separated `source:target[:opts]`) |
 | `OPENCLAW_HOME_VOLUME`                     | Persist `/home/node` in a named Docker volume                   |
@@ -146,6 +148,10 @@ one plugin source directory over its packaged source path, for example
 `OPENCLAW_EXTRA_MOUNTS=/path/to/fork/extensions/synology-chat:/app/extensions/synology-chat:ro`.
 That mounted source directory overrides the matching compiled
 `/app/dist/extensions/synology-chat` bundle for the same plugin id.
+
+When building in mainland China, you can point those BuildKit secrets at local
+mirror configs, for example `OPENCLAW_DOCKER_APT_SOURCES_FILE=deploy/buildkit/debian.sources`
+and `OPENCLAW_DOCKER_NPMRC_FILE=deploy/buildkit/npmrc`.
 
 ### Observability
 

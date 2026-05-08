@@ -62,6 +62,15 @@ if [ -d "$EXTENSIONS_ROOT" ]; then
   done
 fi
 
+BUNDLED_PLUGINS_TO_INSTALL="${BUNDLED_PLUGINS_TO_INSTALL:-}"
+for plugin in $BUNDLED_PLUGINS_TO_INSTALL; do
+  if ! node openclaw.mjs plugins list --enabled | grep -q "^${plugin}$"; then
+    echo "[start-gateway]   -> 安装并启用内置插件: $plugin ..."
+    node openclaw.mjs plugins install --force "${plugin}" > /dev/null
+    node openclaw.mjs plugins enable "$plugin" > /dev/null
+  fi
+done
+
 echo "同步所有agent的工作空间..."
 for workspace_dir in /home/node/.openclaw/workspace-*; do
   if [ -d "$workspace_dir" ]; then

@@ -30,6 +30,12 @@ docker_build_command() {
       build_cmd+=(--cache-to "${OPENCLAW_DOCKER_BUILD_CACHE_TO}")
     fi
   fi
+  if [ -n "${OPENCLAW_DOCKER_APT_SOURCES_FILE:-}" ]; then
+    build_cmd+=(--secret "id=openclaw_debian_sources,src=${OPENCLAW_DOCKER_APT_SOURCES_FILE}")
+  fi
+  if [ -n "${OPENCLAW_DOCKER_NPMRC_FILE:-}" ]; then
+    build_cmd+=(--secret "id=openclaw_npmrc,src=${OPENCLAW_DOCKER_NPMRC_FILE}")
+  fi
 
   printf '%s\0' env DOCKER_BUILDKIT=1 "${build_cmd[@]}" "$@"
 }

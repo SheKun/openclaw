@@ -9,7 +9,22 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}/.."
 COPILOT_HARNESS_DIR="${SCRIPT_DIR}/coding_harness/copilot"
+DOCKER_BUILDKIT_CONFIG_DIR="${SCRIPT_DIR}/buildkit"
+DOCKER_APT_SOURCES_FILE="${DOCKER_BUILDKIT_CONFIG_DIR}/debian.sources"
+DOCKER_NPMRC_FILE="${DOCKER_BUILDKIT_CONFIG_DIR}/npmrc"
 cd "${PROJECT_ROOT}" || exit 1
+
+for required_file in "$DOCKER_APT_SOURCES_FILE" "$DOCKER_NPMRC_FILE"; do
+  if [ ! -f "$required_file" ]; then
+    echo "错误: 未找到 BuildKit 镜像源配置文件 (${required_file})"
+    exit 1
+  fi
+done
+
+DOCKER_BUILD_SECRET_ARGS=(
+  --secret "id=openclaw_debian_sources,src=${DOCKER_APT_SOURCES_FILE}"
+  --secret "id=openclaw_npmrc,src=${DOCKER_NPMRC_FILE}"
+)
 
 echo "0. 配置环境变量 ..."
 # 加载环境变量
@@ -30,7 +45,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202605061506"
+VERSION="${OPENCLAW_VERSION}-build202605091851"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 OPENCLAW_CONFIG_DIR="~/.openclaw"
 
@@ -81,6 +96,7 @@ echo "=> 将构建并部署 Harness 镜像: ${CODER_COPILOT_IMAGE}"
 COPILOT_MODEL="deepseek-v4-pro"
 COPILOT_PROVIDER_MAX_PROMPT_TOKEN=1000000
 COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=393216
+BUNDLED_PLUGINS_TO_INSTALL=""
 
 # 远程部署配置
 REMOTE_HOST="${1:-rmbook}"
@@ -96,10 +112,10 @@ else
   # 使用 --progress=plain 保存完整构建日志，便于事后排查缓存失效。
   BUILD_LOG="/tmp/openclaw-build-${IMAGE_NAME//[\/:]/_}.log"
   echo "=> 构建日志将保存至: ${BUILD_LOG}"
-  docker build --progress=plain --provenance=false \
-    --build-arg "OPENCLAW_INSTALL_BROWSER=1" \
-    --build-arg "OPENCLAW_EXTENSIONS=feishu llm-task lobster acpx" \
-    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@tobilu/qmd @clawdbot/lobster clawhub" \
+  DOCKER_BUILDKIT=1 docker build --progress=plain --provenance=false \
+    "${DOCKER_BUILD_SECRET_ARGS[@]}" \
+    --build-arg "OPENCLAW_EXTENSIONS=browser lobster open-prose llm-task acpx document-extract memory-core active-memory feishu perplexity" \
+    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@clawdbot/lobster clawhub" \
     --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=keepassxc jq ripgrep openssh-client" \
     -t "${IMAGE_NAME}" -f Dockerfile . 2>&1 | tee "${BUILD_LOG}"
 fi
@@ -109,7 +125,8 @@ if docker image inspect "${CODER_COPILOT_IMAGE}" >/dev/null 2>&1; then
   echo "镜像 ${CODER_COPILOT_IMAGE} 已存在，跳过本地构建。"
 else
   echo "镜像 ${CODER_COPILOT_IMAGE} 不存在，开始构建 Copilot Harness 镜像 ..."
-  docker build --provenance=false \
+  DOCKER_BUILDKIT=1 docker build --provenance=false \
+    "${DOCKER_BUILD_SECRET_ARGS[@]}" \
     --build-arg "BASE_IMAGE=${COPILOT_HARNESS_BASE_IMAGE}" \
     --build-arg "COPILOT_VERSION=${COPILOT_VERSION}" \
     --secret id=GH_TOKEN,env=COPILOT_GITHUB_TOKEN \
@@ -190,14 +207,10 @@ ssh "$REMOTE_HOST" "chmod +x ${DEPLOY_DIR}/*.sh"
 
 echo "=> 检查coder harness配置目录 ${CODER_HARNESS_CONFIG_DIR} ..."
 ssh "$REMOTE_HOST" "
-  if [ ! -d ${CODER_HARNESS_CONFIG_DIR} ]; then
-    echo '   => 创建 coder harness 配置目录 ...'
-    mkdir -p ${CODER_HARNESS_CONFIG_DIR}
-    mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh
-    mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.copilot
-  else
-    echo '   => coder harness 配置目录 ${CODER_HARNESS_CONFIG_DIR} 已存在，跳过创建 ...'
-  fi
+  echo '   => 创建 coder harness 配置目录 ...'
+  mkdir -p ${CODER_HARNESS_CONFIG_DIR}
+  mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh
+  mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.copilot
 "
 echo "=> 复制 coder harness 配置文件到 ${CODER_HARNESS_CONFIG_DIR} ..."
 scp ${COPILOT_HARNESS_DIR}/copilot-instructions.md "$REMOTE_HOST:${CODER_HARNESS_CONFIG_DIR}/copilot-instructions.md"
@@ -210,15 +223,12 @@ EOF
 
 echo "=> 检查配置目录 ${OPENCLAW_CONFIG_DIR} ..."
 ssh "$REMOTE_HOST" "
-  if [ ! -d ${OPENCLAW_CONFIG_DIR} ]; then
-    echo '   => 创建配置目录并初始化 OpenClaw 配置 ...'
-    mkdir -p ${OPENCLAW_CONFIG_DIR}
-    mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh
-    mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh/sockets
-    mkdir -p ${OPENCLAW_CONFIG_DIR}/projects
-  else
-    echo '   => 配置目录 ${OPENCLAW_CONFIG_DIR} 已存在，跳过创建 ...'
-  fi
+  echo '   => 创建配置目录并初始化 OpenClaw 配置 ...'
+  mkdir -p ${OPENCLAW_CONFIG_DIR}
+  mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh
+  mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh/sockets
+  mkdir -p ${OPENCLAW_CONFIG_DIR}/projects
+  mkdir -p ${OPENCLAW_CONFIG_DIR}/wiki
 "
 echo "=> 复制配置文件 openclaw.json 到 ${OPENCLAW_CONFIG_DIR}/openclaw.json ..."
 scp ${SCRIPT_DIR}/openclaw_conf.json "$REMOTE_HOST:${OPENCLAW_CONFIG_DIR}/openclaw.json"
@@ -285,6 +295,7 @@ FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
 LITELLM_API_KEY=${LITELLM_API_KEY:-}
 PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
 AGENT_SECRET_DB_PASSWORD=${AGENT_SECRET_DB_PASSWORD:-}
+BUNDLED_PLUGINS_TO_INSTALL='${BUNDLED_PLUGINS_TO_INSTALL:-}'
 EOF
 "
 
@@ -313,15 +324,12 @@ if [ "${#CUSTOM_EXTENSIONS[@]}" -gt 0 ]; then
     exit 1
   fi
 
-  rm -rf "$CUSTOM_EXTENSIONS_ARTIFACT_DIR"
-  mkdir -p "$CUSTOM_EXTENSIONS_ARTIFACT_DIR"
-
   echo "   -> 编译并打包自定义插件..."
   ssh "$REMOTE_HOST" "
     mkdir -p ${DEPLOY_DIR}/myextensions && \
     find ${DEPLOY_DIR}/myextensions -mindepth 1 -maxdepth 1 -exec rm -rf {} +\
   "
-  rm -rf "${CUSTOM_EXTENSIONS_ARTIFACT_DIR}"/*
+  rm -rf "${CUSTOM_EXTENSIONS_ARTIFACT_DIR}"
   mkdir -p "${CUSTOM_EXTENSIONS_ARTIFACT_DIR}"
   for ext in "${CUSTOM_EXTENSIONS[@]}"; do
     EXT_SRC_DIR="${CUSTOM_EXTENSIONS_DIR}/$ext"

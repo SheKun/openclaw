@@ -25,12 +25,13 @@
       "lobster",
       "open-prose",
       "llm-task",
-      "guidance",
       "acpx",
       "perplexity",
       "document-extract",
       "memory-core",
-      "active-memory"
+      "active-memory",
+      "memory-wiki",
+      "guidance"
     ],
     "entries": {
       "browser": {
@@ -107,6 +108,48 @@
             "workspace-shared/SOUL.md",
             "workspace-shared/USER.md"
           ]
+        }
+      },
+      "memory-wiki": {
+        "enabled": true,
+        "config": {
+          "vaultMode": "bridge",
+          "vault": {
+            "path": "~/.openclaw/memory-wiki",
+            "perAgent": true,
+            "renderMode": "obsidian"
+          },
+          "obsidian": {
+            "enabled": true,
+            "useOfficialCli": true,
+            "vaultName": "OpenClaw Wiki",
+            "openAfterWrites": false
+          },
+          "bridge": {
+            "enabled": true,
+            "readMemoryArtifacts": true,
+            "indexDreamReports": false,
+            "indexDailyNotes": true,
+            "indexMemoryRoot": true,
+            "followMemoryEvents": false
+          },
+          "ingest": {
+            "autoCompile": true,
+            "maxConcurrentJobs": 1,
+            "allowUrlIngest": true
+          },
+          "search": {
+            "backend": "shared",
+            "corpus": "wiki"
+          },
+          "context": {
+            "includeCompiledDigestPrompt": false
+          },
+          "render": {
+            "preserveHumanBlocks": true,
+            "createBacklinks": true,
+            "createDashboards": true
+          }
         }
       }
     },
@@ -210,7 +253,6 @@
   "browser": {
     "enabled": true,
     "evaluateEnabled": true,
-    "executablePath": "${CHROMIUM_EXECUTABLE_PATH}",
     "headless": false,
     "noSandbox": true,
     "defaultProfile": "host-chrome",

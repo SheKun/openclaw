@@ -1,16 +1,143 @@
 # OpenClaw 定制部署说明
 
-> **OpenClaw版本**：`v2026.5.4`
+> **OpenClaw 基线版本**：`v2026.5.4`
 >
-> 本文档记录了将 OpenClaw 以容器方式部署到服务器的部署文件、OpenClaw配置文件、部署方法以及对少数源码进行的补丁。
+> 本文档记录了对 OpenClaw 基线版本的定制、以容器方式部署到服务器的部署文件和部署方法。
+
+---
+
+## 目录
+
+- [源码定制](#源码定制)
+  - [Dockerfile 构建阶段调整](#dockerfile-构建阶段调整)
+  - [仓库工作区配置](#仓库工作区配置)
+  - [OpenClaw 插件定制](#openclaw-插件定制)
+    - [memory-wiki 按 agent 隔离 wiki vault](#memory-wiki-按-agent-隔离-wiki-vault)
+    - [guidance 插件全局注入](#guidance-插件全局注入)
+    - [browser 导航超时可配置化](#browser-导航超时可配置化)
+  - [跟进上游版本指南](#跟进上游版本指南)
+- [部署文件](#部署文件)
+- [服务器配置](#服务器配置)
+- [部署架构](#部署架构)
+  - [服务组成](#服务组成)
+  - [网络拓扑](#网络拓扑)
+    - [OpenClaw 访问这些服务的方式](#openclaw-访问这些服务的方式)
+    - [SSH 密钥](#ssh-密钥)
+  - [环境变量](#环境变量)
+- [部署流程](#部署流程)
+  - [一键部署 OpenClaw](#一键部署-openclaw)
+  - [OpenClaw 插件安装](#openclaw-插件安装)
+
+---
+
+## 源码定制
+
+以下是对基线做出的**功能性**修改。跟进上游版本时需确认这些变更是否已被合并，或需要重新应用。
+
+### Dockerfile 构建阶段调整
+
+**涉及文件**：`Dockerfile`
+
+**变更内容**：
+
+- 将 `OPENCLAW_DOCKER_APT_PACKAGES` 安装步骤移到构建的最后阶段，使得后续在镜像中新增小工具时避免执行不必要的构建步骤。
+- 新增 `OPENCLAW_DOCKER_JS_PACKAGES` build-arg，在主镜像中支持通过 `npm install -g` 预装全局 JS 工具（如 skill 依赖的 CLI 工具）。
+- 浏览器安装后自动将 Chromium 可执行路径写入 `/app/.env`：`CHROMIUM_EXECUTABLE_PATH=<path>`，供 browser 插件直接读取。
+
+### 仓库工作区配置
+
+**涉及文件**：
+
+- `.gitignore`：Git 忽略规则。
+- `.dockerignore`：Docker 构建上下文忽略规则。
+- `.github/labeler.yml`：PR 自动标签规则。
+
+**变更内容**：
+
+- `.gitignore`：添加 `openclaw.code-workspace`，避免本地 VS Code 工作区文件被误提交。
+- `.dockerignore`：补充排除一批构建无关文件，包括 IDE 配置（`.vscode/`、`.github/`）、部署脚本（`deploy/`、`fly.toml`、`docker-compose.yml` 等）和文档（`ARCHITECTURE.md`），减小构建上下文体积。
+- `.github/labeler.yml`：添加 `extensions: guidance` 标签规则，使 PR 涉及 `extensions/guidance/` 时自动打标签。
+
+### OpenClaw 插件定制
+
+#### memory-wiki 按 agent 隔离 wiki vault
+
+**涉及文件**：
+
+- `extensions/memory-wiki/src/config.ts`
+- `extensions/memory-wiki/openclaw.plugin.json`
+- `extensions/memory-wiki/src/source-sync.ts`
+- `extensions/memory-wiki/src/bridge.ts`
+- `extensions/memory-wiki/src/query.ts`
+- `extensions/memory-wiki/src/status.ts`
+- `extensions/memory-wiki/src/tool.ts`
+- `extensions/memory-wiki/src/gateway.ts`
+- `extensions/memory-wiki/src/cli.ts`
+- `extensions/memory-wiki/index.ts`
+- `extensions/memory-wiki/src/config.test.ts`
+
+**动机**：在同一 OpenClaw 实例中并行运行多个 agent 时，避免共享 wiki 目录导致的内容串扰，并让 CLI / gateway / tools 在 bridge 模式下都能按 agent 访问正确的 memory artifact。
+
+**变更内容**：
+
+- 新增配置项 `vault.perAgent`（默认 `false`），用于控制 bridge 模式是否启用按 agent 隔离目录。
+- 新增 `resolveScopedMemoryWikiConfig`：统一在运行时按 `agentId` / `agentSessionKey` / 默认 agent 推导作用域，并将 `vault.path` 重写到 `<base>/<agent-id>`。
+- 作用域边界：`vault.perAgent` 仅在 `vaultMode=bridge` 下生效；`isolated` / `unsafe-local` 模式保持 `vault.path` 不变，不受该配置影响。
+- `source-sync` 与 `bridge` 同步链路支持 agent 作用域：
+  - 同步阶段按 `resolvedAgentId` 过滤 `memory-core` 的 public artifacts。
+  - 索引刷新基于 scoped vault 执行，避免跨 agent 刷新误伤。
+- `query` / `status` / `tool` / `gateway` 全链路接入 scoped config：
+  - `wiki_search/wiki_get` 在 shared 后端回退到 active-memory 时会带上解析后的 agent 身份。
+  - `wiki.status/wiki.doctor/wiki.compile/wiki.get/wiki.search/wiki.apply` 等 gateway 方法支持从请求参数接收 `agent` 或 `agentId`。
+- `cli` 全量子命令新增 `--agent <id>`（包括 `status/doctor/init/compile/lint/ingest/search/get/apply/bridge/unsafe-local/chatgpt/obsidian`），确保命令行调用与网关/工具行为一致。
+- `index.ts` 调整工具注册，向 `wiki_status/wiki_lint/wiki_apply` 传递 `agentId/sessionKey`，补齐此前仅 `search/get` 有上下文的缺口。
+- 测试增强：新增 `config.test.ts` 覆盖 `perAgent` 默认行为、显式 agent 路由、无上下文时回退 `main` 目录的场景。
+- 测试增强（补充）：新增用例覆盖 `vault.perAgent=true` 时非 bridge 模式不重写路径，确保“按 agent 隔离”只影响 bridge 模式。
+- 为测试与降级场景保留防御性 fallback：当 `bridge.vaults` 或 `vault.path` 缺失时，`resolveScopedMemoryWikiConfig` 不应抛异常，避免 `source-sync` 测试和运行时崩溃。
+
+#### guidance 插件全局注入
+
+**实现原理**：
+
+- 从 `plugins.entries.guidance.config.files` 配置的文件列表中读取 Markdown 内容。
+- 通过 `registerContextEngine` 将内容注入每次对话的 system prompt addition。
+- 当前注入的文件：`workspace-shared/AGENTS.md`、`TOOLS.md`、`SOUL.md`、`USER.md`（相对于 `~/.openclaw`）。
+- 通过 `plugins.slots.contextEngine: "public-guidance"` 激活为默认上下文引擎。
+
+#### browser 导航超时可配置化
+
+**涉及文件**：
+
+- `extensions/browser/src/browser-tool.ts`：browser 工具对外暴露的 CLI/ACP 接口定义。
+- `extensions/browser/src/browser/client-actions-core.ts`：browser server HTTP 客户端，封装导航等操作请求。
+- `extensions/browser/src/browser/routes/agent.snapshot.ts`：browser server 端路由，处理导航 + 快照请求。
+- `extensions/browser/src/browser/cdp.test.ts`：CDP 连接单元测试。
+- `extensions/browser/src/browser/routes/agent.snapshot.test.ts`：agent snapshot 路由单元测试。
+
+**动机**：解决 agent 连续调用 browser 工具时，打开较大页面超时导致的竞争问题（参见提交 `08bc3770a0`、`d5bf4144c1`）。
+
+**变更内容**：
+
+- `browser-tool.ts`：`navigate` 命令新增 `timeoutMs` 参数（默认 25000 ms），并通过 proxy 请求体传递给 browser server。
+- `client-actions-core.ts`：`browserNavigate` 函数新增 `timeoutMs` 可选参数；fetch 超时设为 `requestedTimeout + 5000 ms`（留出缓冲）。
+- `routes/agent.snapshot.ts`：从请求体中解析 `timeoutMs`，透传给 CDP 导航调用。
+- `cdp.test.ts`：所有 `createTargetViaCdp` 调用补充 `ssrfPolicy: { allowPrivateNetwork: true }`，使测试能连接 localhost CDP 端点。
+- `agent.snapshot.test.ts`：在 `listTabs` mock 的首次返回中补充第二个 tab，匹配 `resolveTargetIdAfterNavigate` 更新后的行为。
+
+### 跟进上游版本指南
+
+1. 将新版本 tag 合并到本分支：`git fetch upstream && git merge v<new-version>`。
+2. 解决冲突，并特别关注源码定制在新的基线上是否仍然适用或必要（新基线已做了类似修订，优先采用基线的实现）；如果仍必要则重新应用，否则报告并询问用户如何处理。
+3. 运行 `pnpm build` 确认编译通过，运行 `pnpm test` 确认测试无回归。
+4. 更新本文档，包括顶部的**基线版本**标注。
 
 ---
 
 ## 部署文件
 
-```
+```text
 deploy/
-├── README.md                   # 本文档
+├── AGENTS.md                   # 本文档
 ├── .env                        # 本地环境变量，包含所有密钥（不入库，见下方变量说明）
 ├── docker-compose.yml          # 定制化 Compose 编排文件
 ├── openclaw_conf.json          # OpenClaw 主配置（agents、channels、models、plugins）
@@ -21,9 +148,8 @@ deploy/
 │   └── copilot/                # GitHub Copilot ACP Harness 镜像定义
 │       ├── Dockerfile
 │       ├── coder_entry.sh      # Harness 容器入口脚本
-│       ├── coder_acp_cmd.sh    # ACP 命令包装（挂载到 gateway 容器）
-│       ├── sshd_config         # 安全加固的 SSH 服务配置
-│       └── copilot-instructions.md
+│       ├── coder_acp_cmd.sh    # 配套 ACP 远程调用命令脚本（供 ACP client 使用，例如 openclaw gateway）
+│       └── sshd_config         # 安全加固的 SSH 服务配置
 └── myextensions/
     └── guidance/               # 自定义全局规则注入插件
         ├── index.ts
@@ -36,15 +162,14 @@ deploy/
 
 ## 服务器配置
 
-- 操作系统：ubuntu 桌面版
+- 操作系统：Ubuntu 桌面版。
 - 必备软件：
-
-1. chrome : 提供浏览器CDP服务
-2. podman & podman-compose ： 运行容器
+  1. Chrome：提供浏览器 CDP 服务。
+  2. Podman 与 podman-compose：运行容器。
 
 ---
 
-## 一、部署架构
+## 部署架构
 
 ### 服务组成
 
@@ -65,18 +190,17 @@ deploy/
 | 宿主机 Chrome CDP (`172.17.0.1:9222`) | 部署主机                              | 提供 browser 插件可复用的宿主机浏览器会话 |
 | GitHub / 飞书等公网端点               | 公网                                  | Git 拉取、Copilot 鉴权、飞书收发消息等    |
 
-#### 网络连接关系
+### 网络拓扑
 
 - `openclaw-gateway` 同时加入三个网络：
   - `openclaw-internal`：与 `coder-copilot` 通信（内部隔离网段）。
   - `local-llm-service`：访问编排外的 `litellm-gateway`。
   - 宿主机默认容器网络（bridge）：用于访问公网端点，并作为到 `172.17.0.1:9222` 的宿主机侧可达路径。
-- `coder-copilot` 加入 `openclaw-internal` ， 为gateway提供服务。
+- `coder-copilot` 加入 `openclaw-internal`，为 gateway 提供服务。
 
 网络拓扑如下图所示：
 
 ```text
-
           +------------------------------+      +------------------------------+
           | Network: openclaw-internal   |      | Network: local-llm-service   |
           +------------------------------+      +------------------------------+
@@ -118,80 +242,23 @@ openclaw-gateway  ----------HTTPS/WebSocket outbound-----------> GitHub / Feishu
 - 访问宿主机 Chrome CDP：
   - `start-gateway.sh` 启动时建立 SSH 隧道账号 `cdp_tunnel`，将容器内 `127.0.0.1:9222` 转发到宿主机 `172.17.0.1:9222`。
   - browser 插件随后通过本地 `9222` 访问到宿主机 Chrome 调试端口。
-- 访问公网服务（飞书/GitHub 等）：
+- 访问公网服务（飞书 / GitHub 等）：
   - 通过容器默认出口网络直连公网。
   - 凭据由 `deploy/.env` 注入（如飞书 app 凭据、Copilot token、模型 key）。
 
-#### SSH密钥
+#### SSH 密钥
 
-部署脚本为 gateway 容器生成密钥对auth，并将其配置为访问github.com、cdp_tunnel和coder-copilot的公共密钥
+部署脚本为 gateway 容器生成密钥对 auth，并将其配置为访问 github.com、cdp_tunnel 和 coder-copilot 的公共密钥。
 
-### Agent 架构
+### 环境变量
 
-配置了三个 agent：
-
-- **steward**（名称 Adam，默认 agent）：主助手，接入飞书 `steward` 账号，使用 `qwen3.6-plus` 模型，具备完整工具集和丰富技能。
-- **coder**（名称 Ape）：编码 agent，运行时为 ACP 模式，底层调用 `coder-copilot` 容器中的 GitHub Copilot CLI，接入飞书 `coder` 账号（限指定用户 DM）。
-- **planner**（名称 Fox）：规划 agent，使用 `qwen3.6-flash` 轻量模型，接入飞书 `planner` 账号，工具集受限（无子 agent）。
-
-### 模型提供者
-
-所有模型通过内网 LiteLLM 网关统一代理（`http://litellm-gateway:8081/v1`）：
-
-| 模型 ID         | 名称          | 特性                             |
-| --------------- | ------------- | -------------------------------- |
-| `qwen3-max`     | Qwen3 Max     | 推理模型，纯文本，上下文 262K    |
-| `qwen3.6-plus`  | Qwen3.6 Plus  | 推理模型，文本+图像，上下文 1M   |
-| `qwen3.6-flash` | Qwen3.6 Flash | 推理模型，文本+图像，上下文 1M   |
-| `kimi-k2.5`     | Kimi K2.5     | 推理模型，文本+图像，上下文 262K |
-
-`perplexity` 插件的 `webSearch` 接口也通过 LiteLLM 代理，模型为 `qwen3.6-flash-search`，实现以国内 Qwen 搜索模型伪装 `web_search` 工具。
+部署脚本会在部署服务器的部署目录下创建一个 `.env` 文件，包含容器编排中引用的所有环境变量（例如飞书 app secret、litellm api key 等）。你知道这个文件的存在即可，不要试图去读取它。
 
 ---
 
-## 二、配置说明
+## 部署流程
 
-### 2.1 主配置文件（`openclaw_conf.json`）
-
-完整的 OpenClaw 配置，关键定制点如下：
-
-**Gateway**
-
-- `bind: lan`，端口 `18789`，TLS 自动生成，认证模式 `token`。
-
-**记忆后端**
-
-- `memory.backend: qmd`（结构化记忆）。
-
-**启用的插件**
-
-- `browser`、`feishu`、`lobster`、`open-prose`、`llm-task`、`guidance`、`acpx`
-
-插件特殊配置：
-
-- `llm-task`：限制为 `litellm/qwen3.6-flash`，默认 provider 为 `litellm`。
-- `acpx`：注册 `copilot` agent，命令为 `/usr/local/bin/coder_acp_cmd.sh`（挂载自 `coding_harness/copilot/`）。
-- `perplexity`：`webSearch` 指向 LiteLLM，模型 `qwen3.6-flash-search`。
-- `guidance`：注入四个 markdown 文件（`workspace-shared/AGENTS.md`、`TOOLS.md`、`SOUL.md`、`USER.md`）。
-
-**消息队列**
-
-- `collect` 模式，防抖 1000ms，上限 20 条，超限时 `summarize`。
-
-**飞书频道**
-
-- DM 策略和群组策略均为 `allowlist`，通过 `allowFrom` 和 `groupAllowFrom` 限定授权用户/群组。
-- 三个飞书账号（`steward`/`coder`/`planner`）的凭据通过环境变量注入。
-
-### 2.2 环境变量（`../.env`（全局）和 `deploy/.env`（本地））
-
-`.env` 文件包含所有密钥，例如，feishu app secret、litellm api key等，被部署脚本访问，当不入库也不能被编码agent访问。
-
----
-
-## 三、部署流程
-
-### 3.1 一键构建 + 远程部署
+### 一键部署 OpenClaw
 
 ```bash
 # 默认部署到 rmbook 主机
@@ -201,124 +268,22 @@ bash deploy/deploy_openclaw.sh
 bash deploy/deploy_openclaw.sh my-server
 ```
 
-脚本逻辑：
+主要逻辑：
 
 1. 加载 `../.env`（全局）和 `deploy/.env`（本地）环境变量。
 2. 从 `package.json` 读取版本号，拼装镜像 tag（`krepus.com/openclaw:<version>-build<timestamp>`）。
 3. 构建 OpenClaw 主镜像（传递 `OPENCLAW_DOCKER_JS_PACKAGES`、`OPENCLAW_INSTALL_BROWSER=1` 等 build-arg）。
 4. 构建 `coder-copilot` Harness 镜像（`krepus.com/coder-copilot:<copilot_version>`）。
 5. 导出两个镜像为 `.tar.gz`，通过 SSH 传输到目标主机并导入。
-6. 在目标主机上生成环境变量文件，`docker compose up -d` 拉起服务。
+6. 将配置文件、容器中用到的脚本以及选装的插件打包传输到部署目录。
+7. 在目标主机初始化运行目录，并生成环境变量文件。
+8. 执行 `docker compose up -d` 拉起服务。
 
-### 3.2 Gateway 启动脚本（`start-gateway.sh`）
+### OpenClaw 插件安装
 
-容器启动时由 Compose `command` 调用，主要步骤：
+插件分为 `预装` 和 `选装` 两类：
 
-1. **APT 缓存配置**：移除 `docker-clean` 钩子，持久化 `.deb` 包缓存（利用 Docker volume `apt_archives`）。
-2. **清理遗留 Browser 锁文件**：`rm -rf ~/.openclaw/browser/openclaw`，防止 browser 工具因异常退出无法重启。
-3. **建立 CDP 隧道**：通过 SSH 将宿主机 `9222` 端口转发到容器内，实现 agent 使用宿主机 Chrome 进行浏览器自动化。SSH host alias 为 `cdp_tunnel`，配置见 `~/.ssh/config`。
-4. **自动安装 extensions**：扫描 `/home/node/.openclaw/extensions/`，对每个目录执行 `plugins install` 和 `plugins enable`（即 `myextensions/` 下的自定义插件）。
-5. **同步工作空间**：对 `~/.openclaw/workspace-*` 下所有 git 仓库执行 `git pull`。
-6. **启动 Gateway**：`node openclaw.mjs gateway --allow-unconfigured`，等待端口就绪后进入 `wait` 守护。
+- 预装插件连同其依赖库将直接打包进 OpenClaw 镜像，详见 `Dockerfile`。
+- 选装插件列表在部署脚本 `deploy_openclaw.sh` 中定义，打包传输到部署目录并挂载在 openclaw-gateway 容器上，由 `start-gateway.sh` 在 Gateway 启动时自动检测并安装。
 
 ---
-
-## 四、GitHub Copilot ACP Harness
-
-位于 `deploy/coding_harness/copilot/`，为 `coder` agent 提供 ACP 编码能力。
-
-### 工作原理
-
-1. `coder-copilot` 容器运行 OpenSSH Server，安装了 `@github/copilot` CLI。
-2. `coder_entry.sh` 在容器启动时初始化 sshd，并调用 `create_ssh_user.sh` 配置 `root` 用户的 SSH 公钥（来自 `OPENCLAW_PUB_KEY` 环境变量）。
-3. `coder_acp_cmd.sh` 被挂载到 gateway 容器的 `/usr/local/bin/`，gateway 通过该脚本以 SSH 方式调用 `copilot --acp --stdio --allow-all-tools --allow-all-paths --allow-all-urls`。
-4. `acpx` 插件中 `copilot` agent 的 `command` 字段指向此脚本，完成 ACP 会话桥接。
-
-### SSH 安全配置（`sshd_config`）
-
-- 禁用密码认证，仅允许公钥认证。
-- 禁用 X11 转发、TCP 转发、Agent 转发、隧道。
-- 限制加密算法为现代安全套件（Ed25519、ChaCha20、AES-GCM、HMAC-SHA2-etm）。
-- 超时：ClientAliveInterval 300s，MaxAuthTries 3，LoginGraceTime 30s。
-
----
-
-## 五、自定义插件（guidance）
-
-位于 `deploy/myextensions/guidance/`，是一个 `kind: context-engine` 类型的插件，实现全局规则注入。
-
-### 功能
-
-- 从 `plugins.entries.guidance.config.files` 配置的文件列表中读取 Markdown 内容。
-- 通过 `registerContextEngine` 将内容注入每次对话的 system prompt addition。
-- 当前注入的文件：`workspace-shared/AGENTS.md`、`TOOLS.md`、`SOUL.md`、`USER.md`（相对于 `~/.openclaw`）。
-- 通过 `plugins.slots.contextEngine: "public-guidance"` 激活为默认上下文引擎。
-
-### 安装方式
-
-由 `start-gateway.sh` 在 Gateway 启动时自动检测并安装，无需手动操作。
-
----
-
-## 六、源码补丁
-
-以下是相对于 `v2026.4.15` 基线对上游源码做出的**功能性**修改。跟进上游版本时需确认这些变更是否已被合并，或需要重新应用。
-
-### 6.1 `Dockerfile` — 构建阶段调整
-
-**涉及文件**：`Dockerfile`
-
-**变更内容**：
-
-- 将 `OPENCLAW_DOCKER_APT_PACKAGES` 安装步骤移到构建的最后阶段，使得后续在镜像中新增小工具时避免执行不必要的构建步骤
-- 新增 `OPENCLAW_DOCKER_JS_PACKAGES` build-arg，在主镜像中支持通过 `npm install -g` 预装全局 JS 工具（如 skill 依赖的 CLI 工具）。
-- 浏览器安装后自动将 Chromium 可执行路径写入 `/app/.env`：`CHROMIUM_EXECUTABLE_PATH=<path>`，供 browser 插件直接读取。
-
-### 6.2 `extensions/browser` — 导航超时可配置化
-
-**涉及文件**：
-
-- `extensions/browser/src/browser-tool.ts`：browser 工具对外暴露的 CLI/ACP 接口定义
-- `extensions/browser/src/browser/client-actions-core.ts`：browser server HTTP 客户端，封装导航等操作请求
-- `extensions/browser/src/browser/routes/agent.snapshot.ts`：browser server 端路由，处理导航+快照请求
-- `extensions/browser/src/browser/cdp.test.ts`：CDP 连接单元测试
-- `extensions/browser/src/browser/routes/agent.snapshot.test.ts`：agent snapshot 路由单元测试
-
-**动机**：解决 agent 连续调用 browser 工具时，打开较大页面超时导致的竞争问题（参见提交 `08bc3770a0`、`d5bf4144c1`）。
-
-**变更内容**：
-
-- `browser-tool.ts`：`navigate` 命令新增 `timeoutMs` 参数（默认 25000ms），并通过 proxy 请求体传递给 browser server。
-- `client-actions-core.ts`：`browserNavigate` 函数新增 `timeoutMs` 可选参数；fetch 超时设为 `requestedTimeout + 5000ms`（留出缓冲）。
-- `routes/agent.snapshot.ts`：从请求体中解析 `timeoutMs`，透传给 CDP 导航调用。
-- `cdp.test.ts`：所有 `createTargetViaCdp` 调用补充 `ssrfPolicy: { allowPrivateNetwork: true }`，使测试能连接 localhost CDP 端点。
-- `agent.snapshot.test.ts`：在 `listTabs` mock 的首次返回中补充第二个 tab，匹配 `resolveTargetIdAfterNavigate` 更新后的行为。
-
-### 6.3 仓库工作区配置
-
-**涉及文件**：
-
-- `.vscode/settings.json`：VSCode 工作区设置
-- `.gitignore`：Git 忽略规则
-- `.dockerignore`：Docker 构建上下文忽略规则
-- `.github/labeler.yml`：PR 自动标签规则
-
-**变更内容**：
-
-- `.vscode/settings.json`：将 `formatOnSave` 改为 `false`，防止编辑器自动格式化引入无意义 diff，干扰与上游的对比。
-- `.gitignore`：添加 `openclaw.code-workspace`，避免本地 VSCode 工作区文件被误提交。
-- `.dockerignore`：补充排除一批构建无关文件，包括 IDE 配置（`.vscode/`、`.github/`）、部署脚本（`deploy/`、`fly.toml`、`docker-compose.yml` 等）和文档（`ARCHITECTURE.md`），减小构建上下文体积。
-- `.github/labeler.yml`：添加 `extensions: guidance` 标签规则，使 PR 涉及 `deploy/myextensions/guidance/` 时自动打标签。
-
----
-
-## 七、跟进上游版本指南
-
-1. 将新版本 tag 合并到本分支：`git fetch upstream && git merge v<new-version>`。
-2. 解决冲突后，重点核查以下文件是否需要重新应用补丁：
-   - `Dockerfile`（构建阶段顺序、新增 build-arg）
-   - `extensions/browser/src/browser-tool.ts`
-   - `extensions/browser/src/browser/client-actions-core.ts`
-   - `extensions/browser/src/browser/routes/agent.snapshot.ts`
-3. 更新本文档顶部的**基线版本**标注。
-4. 运行 `pnpm build` 确认编译通过，`pnpm test` 确认测试无回归。

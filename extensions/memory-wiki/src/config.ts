@@ -17,6 +17,7 @@ export type MemoryWikiPluginConfig = {
   vaultMode?: WikiVaultMode;
   vault?: {
     path?: string;
+    perAgent?: boolean;
     renderMode?: WikiRenderMode;
   };
   obsidian?: {
@@ -60,6 +61,7 @@ export type ResolvedMemoryWikiConfig = {
   vaultMode: WikiVaultMode;
   vault: {
     path: string;
+    perAgent: boolean;
     renderMode: WikiRenderMode;
   };
   obsidian: {
@@ -109,6 +111,7 @@ const MemoryWikiConfigSource = z.strictObject({
   vault: z
     .strictObject({
       path: z.string().optional(),
+      perAgent: z.boolean().optional(),
       renderMode: z.enum(WIKI_RENDER_MODES).optional(),
     })
     .optional(),
@@ -197,6 +200,22 @@ export function resolveDefaultMemoryWikiVaultPath(homedir = os.homedir()): strin
   return path.join(homedir, ".openclaw", "wiki", "main");
 }
 
+export function resolveAgentScopedConfig(
+  config: ResolvedMemoryWikiConfig,
+  agentId?: string | undefined,
+): ResolvedMemoryWikiConfig {
+  if (!config.vault.perAgent || !agentId?.trim()) {
+    return config;
+  }
+  return {
+    ...config,
+    vault: {
+      ...config.vault,
+      path: path.join(config.vault.path, agentId.trim()),
+    },
+  };
+}
+
 export function resolveMemoryWikiConfig(
   config: MemoryWikiPluginConfig | undefined,
   options?: { homedir?: string },
@@ -212,6 +231,7 @@ export function resolveMemoryWikiConfig(
         safeConfig.vault?.path ?? resolveDefaultMemoryWikiVaultPath(homedir),
         homedir,
       ),
+      perAgent: safeConfig.vault?.perAgent ?? false,
       renderMode: safeConfig.vault?.renderMode ?? DEFAULT_WIKI_RENDER_MODE,
     },
     obsidian: {

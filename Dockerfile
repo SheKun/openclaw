@@ -62,7 +62,12 @@ COPY --from=ext-deps /out/ ./${OPENCLAW_BUNDLED_PLUGIN_DIR}/
 
 # Reduce OOM risk on low-memory hosts during dependency installation.
 # Docker builds on small VMs may otherwise fail with "Killed" (exit 137).
-RUN --mount=type=cache,id=openclaw-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+RUN --mount=type=secret,id=openclaw_npmrc,required=false,target=/run/secrets/openclaw-npmrc \
+    --mount=type=cache,id=openclaw-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+    set -eu; \
+    if [ -f /run/secrets/openclaw-npmrc ]; then \
+      export NPM_CONFIG_USERCONFIG=/run/secrets/openclaw-npmrc; \
+    fi; \
     NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
 
 # pnpm v10+ may append peer-resolution hashes to virtual-store folder names; do not hardcode `.pnpm/...`
@@ -117,7 +122,12 @@ ARG OPENCLAW_BUNDLED_PLUGIN_DIR
 # the root, `ui`, and opted-in plugin manifests into the install layer, so
 # prune must not rediscover unrelated workspaces from the later full source
 # copy.
-RUN printf 'packages:\n  - .\n  - ui\n' > /tmp/pnpm-workspace.runtime.yaml && \
+RUN --mount=type=secret,id=openclaw_npmrc,required=false,target=/run/secrets/openclaw-npmrc \
+    set -eu; \
+    if [ -f /run/secrets/openclaw-npmrc ]; then \
+      export NPM_CONFIG_USERCONFIG=/run/secrets/openclaw-npmrc; \
+    fi; \
+    printf 'packages:\n  - .\n  - ui\n' > /tmp/pnpm-workspace.runtime.yaml && \
     for ext in $(printf '%s\n' "$OPENCLAW_EXTENSIONS" | tr ',' ' '); do \
       printf '  - %s/%s\n' "$OPENCLAW_BUNDLED_PLUGIN_DIR" "$ext" >> /tmp/pnpm-workspace.runtime.yaml; \
     done && \
@@ -156,8 +166,14 @@ WORKDIR /app
 # so it must be installed explicitly here. Without it `/etc/ssl/certs/`
 # stays empty and every HTTPS outbound dies at TLS handshake with
 # `error setting certificate file`.
-RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=secret,id=openclaw_debian_sources,required=false,target=/run/secrets/openclaw-debian.sources \
+    --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=openclaw-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
+    set -eu; \
+    if [ -f /run/secrets/openclaw-debian.sources ]; then \
+      rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; \
+      cp /run/secrets/openclaw-debian.sources /etc/apt/sources.list.d/debian.sources; \
+    fi; \
     apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates procps hostname curl git lsof openssl python3 && \
@@ -179,7 +195,16 @@ COPY --from=runtime-assets --chown=node:node /app/qa ./qa
 # Use a shared Corepack home so the non-root `node` user does not need a
 # first-run network fetch when invoking pnpm.
 ENV COREPACK_HOME=/usr/local/share/corepack
-RUN install -d -m 0755 "$COREPACK_HOME" && \
+RUN --mount=type=secret,id=openclaw_npmrc,required=false,target=/run/secrets/openclaw-npmrc \
+    set -eu; \
+    if [ -f /run/secrets/openclaw-npmrc ]; then \
+      export NPM_CONFIG_USERCONFIG=/run/secrets/openclaw-npmrc; \
+      registry="$(awk -F= '$1 == "registry" { gsub(/[[:space:]]/, "", $2); print $2; exit }' /run/secrets/openclaw-npmrc)"; \
+      if [ -n "$registry" ]; then \
+        export COREPACK_NPM_REGISTRY="$registry"; \
+      fi; \
+    fi; \
+    install -d -m 0755 "$COREPACK_HOME" && \
     corepack enable && \
     for attempt in 1 2 3 4 5; do \
       if corepack prepare "$(node -p "require('./package.json').packageManager")" --activate; then \
@@ -199,8 +224,14 @@ RUN install -d -m 0755 "$COREPACK_HOME" && \
 # Adds ~300MB but eliminates the 60-90s Playwright install on every container start.
 # Must run after node_modules COPY so playwright-core is available.
 ARG OPENCLAW_INSTALL_BROWSER=""
-RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=secret,id=openclaw_debian_sources,required=false,target=/run/secrets/openclaw-debian.sources \
+    --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=openclaw-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
+    set -eu; \
+    if [ -f /run/secrets/openclaw-debian.sources ]; then \
+      rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; \
+      cp /run/secrets/openclaw-debian.sources /etc/apt/sources.list.d/debian.sources; \
+    fi; \
     if [ -n "$OPENCLAW_INSTALL_BROWSER" ]; then \
       apt-get update && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb && \
@@ -219,8 +250,14 @@ RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,shar
 # Required for agents.defaults.sandbox to function in Docker deployments.
 ARG OPENCLAW_INSTALL_DOCKER_CLI=""
 ARG OPENCLAW_DOCKER_GPG_FINGERPRINT="9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
-RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=secret,id=openclaw_debian_sources,required=false,target=/run/secrets/openclaw-debian.sources \
+    --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=openclaw-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
+    set -eu; \
+    if [ -f /run/secrets/openclaw-debian.sources ]; then \
+      rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; \
+      cp /run/secrets/openclaw-debian.sources /etc/apt/sources.list.d/debian.sources; \
+    fi; \
     if [ -n "$OPENCLAW_INSTALL_DOCKER_CLI" ]; then \
       apt-get update && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -266,7 +303,12 @@ ENV NODE_ENV=production
 # pre-install the tools may be needed by the agent
 USER root
 ARG OPENCLAW_DOCKER_JS_PACKAGES=""
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=secret,id=openclaw_npmrc,required=false,target=/run/secrets/openclaw-npmrc \
+    --mount=type=cache,target=/root/.npm \
+    set -eu; \
+    if [ -f /run/secrets/openclaw-npmrc ]; then \
+      export NPM_CONFIG_USERCONFIG=/run/secrets/openclaw-npmrc; \
+    fi; \
     if [ -n "$OPENCLAW_DOCKER_JS_PACKAGES" ]; then \
       npm install -g $OPENCLAW_DOCKER_JS_PACKAGES; \
     fi
@@ -275,8 +317,14 @@ USER root
 # Install additional system packages needed by your skills or extensions.
 # Example: docker build --build-arg OPENCLAW_DOCKER_APT_PACKAGES="python3 wget" .
 ARG OPENCLAW_DOCKER_APT_PACKAGES=""
-RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
+RUN --mount=type=secret,id=openclaw_debian_sources,required=false,target=/run/secrets/openclaw-debian.sources \
+    --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=openclaw-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
+    set -eu; \
+    if [ -f /run/secrets/openclaw-debian.sources ]; then \
+      rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; \
+      cp /run/secrets/openclaw-debian.sources /etc/apt/sources.list.d/debian.sources; \
+    fi; \
     if [ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]; then \
       apt-get update && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $OPENCLAW_DOCKER_APT_PACKAGES; \

@@ -4,15 +4,18 @@ import {
   normalizeMemoryWikiMutationInput,
   type ApplyMemoryWikiMutation,
 } from "./apply.js";
+import { resolveMemoryWikiConfig } from "./config.js";
 import { registerMemoryWikiGatewayMethods } from "./gateway.js";
 import { listMemoryWikiImportInsights } from "./import-insights.js";
 import { listMemoryWikiImportRuns } from "./import-runs.js";
 import { ingestMemoryWikiSource } from "./ingest.js";
 import { listMemoryWikiPalace } from "./memory-palace.js";
+import { probeObsidianCli } from "./obsidian.js";
 import { searchMemoryWiki } from "./query.js";
 import { syncMemoryWikiImportedSources } from "./source-sync.js";
 import { resolveMemoryWikiStatus } from "./status.js";
 import { createMemoryWikiTestHarness } from "./test-helpers.js";
+import { initializeMemoryWikiVault } from "./vault.js";
 
 vi.mock("./apply.js", () => ({
   applyMemoryWikiMutation: vi.fn(),
@@ -462,5 +465,163 @@ describe("memory-wiki gateway methods", () => {
         pagePath: "syntheses/gateway-alpha.md",
       }),
     );
+  });
+
+  describe("perAgent vault scoping", () => {
+    it("ignores agent when perAgent is false (isolated)", async () => {
+      const { config } = await createVault({
+        prefix: "memory-wiki-gateway-pera-",
+        config: { vault: { perAgent: false } },
+      });
+      const { api, registerGatewayMethod } = createPluginApi();
+
+      registerMemoryWikiGatewayMethods({ api, config });
+      const handler = findGatewayHandler(registerGatewayMethod, "wiki.status");
+      if (!handler) throw new Error("wiki.status handler missing");
+      const respond = vi.fn();
+
+      await handler({ params: { agent: "agent-1" }, respond });
+
+      expect(resolveMemoryWikiStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ vault: expect.objectContaining({ path: config.vault.path }) }),
+        expect.anything(),
+      );
+      expect(respond).toHaveBeenCalledWith(true, expect.anything());
+    });
+
+    it("scopes vault path when perAgent is true and agent is provided (isolated)", async () => {
+      const baseDir = "/base/wiki";
+      const config = resolveMemoryWikiConfig(
+        { vault: { path: baseDir, perAgent: true } },
+        { homedir: "/Users/tester" },
+      );
+      const { api, registerGatewayMethod } = createPluginApi();
+
+      registerMemoryWikiGatewayMethods({ api, config });
+      const handler = findGatewayHandler(registerGatewayMethod, "wiki.status");
+      if (!handler) throw new Error("wiki.status handler missing");
+      const respond = vi.fn();
+
+      await handler({ params: { agent: "agent-alpha" }, respond });
+
+      expect(resolveMemoryWikiStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vault: expect.objectContaining({ path: `${baseDir}/agent-alpha` }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("falls back to base vault when perAgent is true but agent is absent", async () => {
+      const baseDir = "/base/wiki";
+      const config = resolveMemoryWikiConfig(
+        { vault: { path: baseDir, perAgent: true } },
+        { homedir: "/Users/tester" },
+      );
+      const { api, registerGatewayMethod } = createPluginApi();
+
+      registerMemoryWikiGatewayMethods({ api, config });
+      const handler = findGatewayHandler(registerGatewayMethod, "wiki.status");
+      if (!handler) throw new Error("wiki.status handler missing");
+      const respond = vi.fn();
+
+      await handler({ params: {}, respond });
+
+      expect(resolveMemoryWikiStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ vault: expect.objectContaining({ path: baseDir }) }),
+        expect.anything(),
+      );
+    });
+
+    it("scopes vault path for bridge mode when perAgent is true", async () => {
+      const baseDir = "/base/wiki";
+      const config = resolveMemoryWikiConfig(
+        { vaultMode: "bridge", vault: { path: baseDir, perAgent: true } },
+        { homedir: "/Users/tester" },
+      );
+      const { api, registerGatewayMethod } = createPluginApi();
+
+      registerMemoryWikiGatewayMethods({ api, config });
+      const handler = findGatewayHandler(registerGatewayMethod, "wiki.bridge.import");
+      if (!handler) throw new Error("wiki.bridge.import handler missing");
+      const respond = vi.fn();
+
+      await handler({ params: { agent: "bridge-agent" }, respond });
+
+      expect(syncMemoryWikiImportedSources).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            vaultMode: "bridge",
+            vault: expect.objectContaining({ path: `${baseDir}/bridge-agent` }),
+          }),
+        }),
+      );
+    });
+
+    it("scopes vault path for unsafe-local mode when perAgent is true", async () => {
+      const baseDir = "/base/wiki";
+      const config = resolveMemoryWikiConfig(
+        { vaultMode: "unsafe-local", vault: { path: baseDir, perAgent: true } },
+        { homedir: "/Users/tester" },
+      );
+      const { api, registerGatewayMethod } = createPluginApi();
+
+      registerMemoryWikiGatewayMethods({ api, config });
+      const handler = findGatewayHandler(registerGatewayMethod, "wiki.unsafeLocal.import");
+      if (!handler) throw new Error("wiki.unsafeLocal.import handler missing");
+      const respond = vi.fn();
+
+      await handler({ params: { agent: "local-agent" }, respond });
+
+      expect(syncMemoryWikiImportedSources).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            vaultMode: "unsafe-local",
+            vault: expect.objectContaining({ path: `${baseDir}/local-agent` }),
+          }),
+        }),
+      );
+    });
+
+    it("wiki.obsidian.status does not scope by agent (vault-agnostic probe)", async () => {
+      const { config } = await createVault({
+        prefix: "memory-wiki-gateway-obsidian-",
+        config: { vault: { perAgent: true } },
+      });
+      const { api, registerGatewayMethod } = createPluginApi();
+
+      registerMemoryWikiGatewayMethods({ api, config });
+      const handler = findGatewayHandler(registerGatewayMethod, "wiki.obsidian.status");
+      if (!handler) throw new Error("wiki.obsidian.status handler missing");
+      const respond = vi.fn();
+
+      await handler({ params: { agent: "should-be-ignored" }, respond });
+
+      expect(probeObsidianCli).toHaveBeenCalled();
+      // respond is called with true as first arg regardless of vault scoping
+      expect(respond.mock.calls[0]?.[0]).toBe(true);
+    });
+
+    it("scopes vault path for wiki.init when perAgent is true", async () => {
+      const baseDir = "/base/wiki";
+      const config = resolveMemoryWikiConfig(
+        { vault: { path: baseDir, perAgent: true } },
+        { homedir: "/Users/tester" },
+      );
+      const { api, registerGatewayMethod } = createPluginApi();
+
+      registerMemoryWikiGatewayMethods({ api, config });
+      const handler = findGatewayHandler(registerGatewayMethod, "wiki.init");
+      if (!handler) throw new Error("wiki.init handler missing");
+      const respond = vi.fn();
+
+      await handler({ params: { agent: "init-agent" }, respond });
+
+      expect(initializeMemoryWikiVault).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vault: expect.objectContaining({ path: `${baseDir}/init-agent` }),
+        }),
+      );
+    });
   });
 });
