@@ -12,7 +12,6 @@
   - [Dockerfile 构建阶段调整](#dockerfile-构建阶段调整)
   - [仓库工作区配置](#仓库工作区配置)
   - [OpenClaw 插件定制](#openclaw-插件定制)
-    - [memory-wiki 按 agent 隔离 wiki vault](#memory-wiki-按-agent-隔离-wiki-vault)
     - [guidance 插件全局注入](#guidance-插件全局注入)
     - [browser 导航超时可配置化](#browser-导航超时可配置化)
   - [跟进上游版本指南](#跟进上游版本指南)
@@ -36,13 +35,23 @@
 
 ### Dockerfile 构建阶段调整
 
-**涉及文件**：`Dockerfile`
+**涉及文件**：
+
+- `Dockerfile`
+- `scripts/lib/docker-build.sh`
+- `docs/install/docker.md`
+- `deploy/buildkit/debian.sources`
+- `deploy/buildkit/npmrc`
 
 **变更内容**：
 
 - 将 `OPENCLAW_DOCKER_APT_PACKAGES` 安装步骤移到构建的最后阶段，使得后续在镜像中新增小工具时避免执行不必要的构建步骤。
 - 新增 `OPENCLAW_DOCKER_JS_PACKAGES` build-arg，在主镜像中支持通过 `npm install -g` 预装全局 JS 工具（如 skill 依赖的 CLI 工具）。
 - 浏览器安装后自动将 Chromium 可执行路径写入 `/app/.env`：`CHROMIUM_EXECUTABLE_PATH=<path>`，供 browser 插件直接读取。
+- 支持通过 BuildKit secret 注入自定义 apt 源与 npm 源：
+  - `OPENCLAW_DOCKER_APT_SOURCES_FILE` -> `openclaw_debian_sources`
+  - `OPENCLAW_DOCKER_NPMRC_FILE` -> `openclaw_npmrc`
+- 在依赖安装、corepack 准备、apt 安装等关键步骤统一读取上述 secret，便于在受限网络环境下复用镜像站配置。
 
 ### 仓库工作区配置
 
@@ -59,41 +68,6 @@
 - `.github/labeler.yml`：添加 `extensions: guidance` 标签规则，使 PR 涉及 `extensions/guidance/` 时自动打标签。
 
 ### OpenClaw 插件定制
-
-#### memory-wiki 按 agent 隔离 wiki vault
-
-**涉及文件**：
-
-- `extensions/memory-wiki/src/config.ts`
-- `extensions/memory-wiki/openclaw.plugin.json`
-- `extensions/memory-wiki/src/source-sync.ts`
-- `extensions/memory-wiki/src/bridge.ts`
-- `extensions/memory-wiki/src/query.ts`
-- `extensions/memory-wiki/src/status.ts`
-- `extensions/memory-wiki/src/tool.ts`
-- `extensions/memory-wiki/src/gateway.ts`
-- `extensions/memory-wiki/src/cli.ts`
-- `extensions/memory-wiki/index.ts`
-- `extensions/memory-wiki/src/config.test.ts`
-
-**动机**：在同一 OpenClaw 实例中并行运行多个 agent 时，避免共享 wiki 目录导致的内容串扰，并让 CLI / gateway / tools 在 bridge 模式下都能按 agent 访问正确的 memory artifact。
-
-**变更内容**：
-
-- 新增配置项 `vault.perAgent`（默认 `false`），用于控制 bridge 模式是否启用按 agent 隔离目录。
-- 新增 `resolveScopedMemoryWikiConfig`：统一在运行时按 `agentId` / `agentSessionKey` / 默认 agent 推导作用域，并将 `vault.path` 重写到 `<base>/<agent-id>`。
-- 作用域边界：`vault.perAgent` 仅在 `vaultMode=bridge` 下生效；`isolated` / `unsafe-local` 模式保持 `vault.path` 不变，不受该配置影响。
-- `source-sync` 与 `bridge` 同步链路支持 agent 作用域：
-  - 同步阶段按 `resolvedAgentId` 过滤 `memory-core` 的 public artifacts。
-  - 索引刷新基于 scoped vault 执行，避免跨 agent 刷新误伤。
-- `query` / `status` / `tool` / `gateway` 全链路接入 scoped config：
-  - `wiki_search/wiki_get` 在 shared 后端回退到 active-memory 时会带上解析后的 agent 身份。
-  - `wiki.status/wiki.doctor/wiki.compile/wiki.get/wiki.search/wiki.apply` 等 gateway 方法支持从请求参数接收 `agent` 或 `agentId`。
-- `cli` 全量子命令新增 `--agent <id>`（包括 `status/doctor/init/compile/lint/ingest/search/get/apply/bridge/unsafe-local/chatgpt/obsidian`），确保命令行调用与网关/工具行为一致。
-- `index.ts` 调整工具注册，向 `wiki_status/wiki_lint/wiki_apply` 传递 `agentId/sessionKey`，补齐此前仅 `search/get` 有上下文的缺口。
-- 测试增强：新增 `config.test.ts` 覆盖 `perAgent` 默认行为、显式 agent 路由、无上下文时回退 `main` 目录的场景。
-- 测试增强（补充）：新增用例覆盖 `vault.perAgent=true` 时非 bridge 模式不重写路径，确保“按 agent 隔离”只影响 bridge 模式。
-- 为测试与降级场景保留防御性 fallback：当 `bridge.vaults` 或 `vault.path` 缺失时，`resolveScopedMemoryWikiConfig` 不应抛异常，避免 `source-sync` 测试和运行时崩溃。
 
 #### guidance 插件全局注入
 
@@ -144,6 +118,9 @@ deploy/
 ├── start-gateway.sh            # Gateway 容器启动包装脚本
 ├── deploy_openclaw.sh          # 本地构建 + SSH 远程部署脚本
 ├── create_ssh_user.sh          # SSH 用户初始化工具（被 coder-copilot 容器调用）
+├── buildkit/                   # BuildKit secret 配置（镜像源）
+│   ├── debian.sources
+│   └── npmrc
 ├── coding_harness/
 │   └── copilot/                # GitHub Copilot ACP Harness 镜像定义
 │       ├── Dockerfile
