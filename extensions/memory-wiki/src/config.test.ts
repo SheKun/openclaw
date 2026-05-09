@@ -8,7 +8,6 @@ import {
   DEFAULT_WIKI_SEARCH_BACKEND,
   DEFAULT_WIKI_SEARCH_CORPUS,
   DEFAULT_WIKI_VAULT_MODE,
-  resolveAgentScopedConfig,
   resolveDefaultMemoryWikiVaultPath,
   resolveMemoryWikiConfig,
 } from "./config.js";
@@ -60,91 +59,6 @@ describe("resolveMemoryWikiConfig", () => {
 
     expect(canonical.bridge.readMemoryArtifacts).toBe(false);
   });
-
-  it("defaults perAgent to false", () => {
-    const config = resolveMemoryWikiConfig(undefined, { homedir: "/Users/tester" });
-    expect(config.vault.perAgent).toBe(false);
-  });
-
-  it("preserves perAgent when explicitly set to true", () => {
-    const config = resolveMemoryWikiConfig(
-      { vault: { perAgent: true } },
-      { homedir: "/Users/tester" },
-    );
-    expect(config.vault.perAgent).toBe(true);
-  });
-});
-
-describe("resolveAgentScopedConfig", () => {
-  it("returns the same config when perAgent is false", () => {
-    const config = resolveMemoryWikiConfig(
-      { vault: { path: "/base/wiki", perAgent: false } },
-      { homedir: "/Users/tester" },
-    );
-    const scoped = resolveAgentScopedConfig(config, "agent-1");
-    expect(scoped.vault.path).toBe("/base/wiki");
-    expect(scoped).toBe(config);
-  });
-
-  it("returns the same config when perAgent is true but agentId is absent", () => {
-    const config = resolveMemoryWikiConfig(
-      { vault: { path: "/base/wiki", perAgent: true } },
-      { homedir: "/Users/tester" },
-    );
-    const scoped = resolveAgentScopedConfig(config, undefined);
-    expect(scoped.vault.path).toBe("/base/wiki");
-    expect(scoped).toBe(config);
-  });
-
-  it("returns the same config when perAgent is true but agentId is empty string", () => {
-    const config = resolveMemoryWikiConfig(
-      { vault: { path: "/base/wiki", perAgent: true } },
-      { homedir: "/Users/tester" },
-    );
-    const scoped = resolveAgentScopedConfig(config, "   ");
-    expect(scoped.vault.path).toBe("/base/wiki");
-    expect(scoped).toBe(config);
-  });
-
-  it("scopes vault.path when perAgent is true and agentId is provided", () => {
-    const config = resolveMemoryWikiConfig(
-      { vault: { path: "/base/wiki", perAgent: true } },
-      { homedir: "/Users/tester" },
-    );
-    const scoped = resolveAgentScopedConfig(config, "agent-1");
-    expect(scoped.vault.path).toBe(path.join("/base/wiki", "agent-1"));
-    expect(scoped.vault.perAgent).toBe(true);
-    expect(scoped.vaultMode).toBe(config.vaultMode);
-  });
-
-  it("scopes vault.path for bridge mode when perAgent is true", () => {
-    const config = resolveMemoryWikiConfig(
-      { vaultMode: "bridge", vault: { path: "/base/wiki", perAgent: true } },
-      { homedir: "/Users/tester" },
-    );
-    const scoped = resolveAgentScopedConfig(config, "bridge-agent");
-    expect(scoped.vault.path).toBe(path.join("/base/wiki", "bridge-agent"));
-    expect(scoped.vaultMode).toBe("bridge");
-  });
-
-  it("scopes vault.path for unsafe-local mode when perAgent is true", () => {
-    const config = resolveMemoryWikiConfig(
-      { vaultMode: "unsafe-local", vault: { path: "/base/wiki", perAgent: true } },
-      { homedir: "/Users/tester" },
-    );
-    const scoped = resolveAgentScopedConfig(config, "local-agent");
-    expect(scoped.vault.path).toBe(path.join("/base/wiki", "local-agent"));
-    expect(scoped.vaultMode).toBe("unsafe-local");
-  });
-
-  it("trims whitespace from agentId", () => {
-    const config = resolveMemoryWikiConfig(
-      { vault: { path: "/base/wiki", perAgent: true } },
-      { homedir: "/Users/tester" },
-    );
-    const scoped = resolveAgentScopedConfig(config, "  agent-2  ");
-    expect(scoped.vault.path).toBe(path.join("/base/wiki", "agent-2"));
-  });
 });
 
 describe("memory-wiki manifest config schema", () => {
@@ -154,7 +68,6 @@ describe("memory-wiki manifest config schema", () => {
       vaultMode: "unsafe-local",
       vault: {
         path: "~/wiki",
-        perAgent: true,
         renderMode: "obsidian",
       },
       obsidian: {

@@ -116,7 +116,6 @@
           "vaultMode": "bridge",
           "vault": {
             "path": "~/.openclaw/memory-wiki",
-            "perAgent": true,
             "renderMode": "obsidian"
           },
           "obsidian": {
@@ -140,7 +139,7 @@
           },
           "search": {
             "backend": "shared",
-            "corpus": "wiki"
+            "corpus": "all"
           },
           "context": {
             "includeCompiledDigestPrompt": false

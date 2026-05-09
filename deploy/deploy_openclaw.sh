@@ -45,7 +45,7 @@ if [ -z "$OPENCLAW_VERSION" ]; then
   echo "无法从 package.json 获取版本号！"
   exit 1
 fi
-VERSION="${OPENCLAW_VERSION}-build202605091851"
+VERSION="${OPENCLAW_VERSION}-build202605091410"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 OPENCLAW_CONFIG_DIR="~/.openclaw"
 
@@ -74,6 +74,40 @@ DEFAULT_AGENT_DIR="${OPENCLAW_CONFIG_DIR}/agents/${DEFAULT_AGENT_ID}/agent"
 echo "=> 从配置解析默认 Agent: ${DEFAULT_AGENT_ID}"
 echo "=> 将设置 OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}"
 
+# 以下这些稳定的扩展、工具和插件会被内置到镜像中，免得每次部署都要重新安装
+OPENCLAW_EXTENSIONS=(
+  browser
+  lobster
+  open-prose
+  llm-task
+  acpx
+  document-extract
+  memory-core
+  active-memory
+  feishu
+  perplexity
+)
+OPENCLAW_DOCKER_JS_PACKAGES=(
+  @tobilu/qmd
+  @clawdbot/lobster
+  clawhub
+)
+OPENCLAW_DOCKER_APT_PACKAGES=(
+  keepassxc
+  jq
+  ripgrep
+  openssh-client
+)
+
+# 以下插件观察中，暂不内置到镜像中，等稳定后再添加到 OPENCLAW_EXTENSIONS 中
+BUNDLED_PLUGINS_TO_INSTALL=(
+  memory-wiki
+)
+# 需要安装的自定义插件
+CUSTOM_EXTENSIONS=(
+  "guidance"
+) 
+
 # Copilot Harness 服务配置
 COPILOT_VERSION="1.0.38" # 这里可以指定一个固定版本，或者留空以自动查询最新版本
 if [ -z "$COPILOT_VERSION" ]; then
@@ -96,7 +130,6 @@ echo "=> 将构建并部署 Harness 镜像: ${CODER_COPILOT_IMAGE}"
 COPILOT_MODEL="deepseek-v4-pro"
 COPILOT_PROVIDER_MAX_PROMPT_TOKEN=1000000
 COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=393216
-BUNDLED_PLUGINS_TO_INSTALL=""
 
 # 远程部署配置
 REMOTE_HOST="${1:-rmbook}"
@@ -114,9 +147,9 @@ else
   echo "=> 构建日志将保存至: ${BUILD_LOG}"
   DOCKER_BUILDKIT=1 docker build --progress=plain --provenance=false \
     "${DOCKER_BUILD_SECRET_ARGS[@]}" \
-    --build-arg "OPENCLAW_EXTENSIONS=browser lobster open-prose llm-task acpx document-extract memory-core active-memory feishu perplexity" \
-    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=@clawdbot/lobster clawhub" \
-    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=keepassxc jq ripgrep openssh-client" \
+    --build-arg "OPENCLAW_EXTENSIONS=${OPENCLAW_EXTENSIONS[*]}" \
+    --build-arg "OPENCLAW_DOCKER_JS_PACKAGES=${OPENCLAW_DOCKER_JS_PACKAGES[*]}" \
+    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=${OPENCLAW_DOCKER_APT_PACKAGES[*]}" \
     -t "${IMAGE_NAME}" -f Dockerfile . 2>&1 | tee "${BUILD_LOG}"
 fi
 
@@ -273,8 +306,7 @@ ssh -t "$REMOTE_HOST" "
 
 # 统一使用 .env：既用于 compose 变量替换，也为 service environment 提供取值
 echo "=> 生成 .env 文件 (compose + runtime 变量) ..."
-ssh "$REMOTE_HOST" "
-cat <<EOF > ${DEPLOY_DIR}/.env
+ssh "$REMOTE_HOST" "cat <<EOF > ${DEPLOY_DIR}/.env
 OPENCLAW_IMAGE=${IMAGE_NAME}
 CODER_COPILOT_IMAGE=${CODER_COPILOT_IMAGE}
 OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
@@ -295,7 +327,7 @@ FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
 LITELLM_API_KEY=${LITELLM_API_KEY:-}
 PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
 AGENT_SECRET_DB_PASSWORD=${AGENT_SECRET_DB_PASSWORD:-}
-BUNDLED_PLUGINS_TO_INSTALL='${BUNDLED_PLUGINS_TO_INSTALL:-}'
+BUNDLED_PLUGINS_TO_INSTALL='${BUNDLED_PLUGINS_TO_INSTALL[*]:-}'
 EOF
 "
 
@@ -316,9 +348,8 @@ echo "   => 连通性检查通过。"
 
 echo '=> 同步自定义插件 ...'
 CUSTOM_EXTENSIONS_DIR="${SCRIPT_DIR}/myextensions"
-CUSTOM_EXTENSIONS=("guidance") # 这里可以添加更多自定义插件名称
 CUSTOM_EXTENSIONS_ARTIFACT_DIR="${CUSTOM_EXTENSIONS_DIR}/dist"
-if [ "${#CUSTOM_EXTENSIONS[@]}" -gt 0 ]; then
+if [ ${#CUSTOM_EXTENSIONS[@]} -gt 0 ]; then
   if ! command -v pnpm >/dev/null 2>&1; then
     echo "❌ 错误: 未找到 pnpm，无法编译自定义插件。"
     exit 1
