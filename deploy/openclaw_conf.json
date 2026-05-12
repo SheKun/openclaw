@@ -3,6 +3,11 @@
     "mode": "local",
     "bind": "lan",
     "port": 18789,
+    "nodes": {
+      "pairing": {
+        "autoApproveCidrs": ["172.30.0.10/32"]
+      }
+    },
     "auth": {
       "mode": "token"
     },
@@ -12,7 +17,9 @@
     },
     "tls": {
       "enabled": true,
-      "autoGenerate": true
+      "autoGenerate": false,
+      "certPath": "/home/node/.openclaw/gateway/tls/gateway-cert.pem",
+      "keyPath": "/home/node/.openclaw/gateway/tls/gateway-key.pem"
     }
   },
   "memory": {
@@ -157,6 +164,27 @@
       "contextEngine": "guidance"
     }
   },
+  "secrets": {
+    "providers": {
+      "default": { "source": "env" },
+      "vault": {
+        "source": "exec",
+        "command": "/usr/bin/keepassxc-cli",
+        "args": ["-q", "-a", "password", "${VAULT_DB_PATH}"],
+        "passEnv": [],
+        "jsonOnly": false
+      }
+    },
+    "defaults": {
+      "env": "default",
+      "exec": "vault"
+    },
+    "resolution": {
+      "maxProviderConcurrency": 4,
+      "maxRefsPerProvider": 512,
+      "maxBatchBytes": 262144
+    }
+  },
   "commitments": {
     "enabled": true,
     "maxPerDay": 3
@@ -211,9 +239,13 @@
       }
     },
     "exec": {
-      "host": "gateway",
+      "host": "node",
+      "node": "exec_node",
       "security": "full",
       "ask": "off"
+    },
+    "fs": {
+      "workspaceOnly": true
     }
   },
   "acp": {
@@ -284,6 +316,7 @@
       "timeoutSeconds": 3600,
       "maxConcurrent": 4,
       "verboseDefault": "on",
+      "reasoningDefault": "on",
       "subagents": {
         "runTimeoutSeconds": 1800,
         "maxConcurrent": 8,
@@ -332,7 +365,6 @@
         "workspace": "~/.openclaw/workspace-steward",
         "agentDir": "~/.openclaw/agents/steward/agent",
         "model": "litellm/qwen3.6-plus",
-        "reasoningDefault": "on",
         "subagents": {
           "allowAgents": ["*"]
         },
@@ -351,7 +383,6 @@
           "keepassxc",
           "session-logs",
           "weather",
-          "github",
           "obsidian",
           "wiki-create"
         ]
@@ -396,7 +427,7 @@
         },
         "tools": {
           "profile": "minimal",
-          "alsoAllow": ["browser", "group:web"]
+          "alsoAllow": ["browser", "group:web", "read", "write", "exec"]
         },
         "skills": ["browser-automation", "wiki-create", "ctrip-travel-search"]
       }

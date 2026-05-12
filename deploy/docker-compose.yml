@@ -6,9 +6,9 @@ services:
     environment:
       OPENCLAW_PUB_KEY: ${OPENCLAW_PUB_KEY:-}
     volumes:
-      - ${OPENCLAW_CONFIG_DIR}/projects:/projects
       - ${CODER_HARNESS_CONFIG_DIR}/.ssh:/root/.ssh
       - ${CODER_HARNESS_CONFIG_DIR}/.copilot:/root/.copilot
+      - ./output/projects:/projects
       - ./coder_entry.sh:/entrypoint.sh:ro
       - ./create_ssh_user.sh:/create_ssh_user.sh:ro
     init: true
@@ -16,6 +16,33 @@ services:
     entrypoint: ["/entrypoint.sh"]
     networks:
       - openclaw-internal
+
+  openclaw-exec-node:
+    container_name: openclaw-exec-node
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    user: "root"
+    environment:
+      HOME: /home/node
+      OPENCLAW_STATE_DIR: /home/node/.exec_node
+      OPENCLAW_GATEWAY_TLS_FINGERPRINT: ${OPENCLAW_GATEWAY_TLS_FINGERPRINT:-}
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-debug}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
+      - ${EXEC_NODE_CONFIG_DIR}:/home/node/.exec_node
+      - apt_archives:/var/cache/apt/archives/
+      - npm_archives:/root/.npm
+      - npm_archives:/home/node/.npm
+      - ./exec_node_entry.sh:/usr/local/bin/exec_node_entry.sh:ro
+      - ./output:/output
+    init: true
+    depends_on:
+      openclaw-gateway:
+        condition: service_started
+    command: ["sh", "/usr/local/bin/exec_node_entry.sh"]
+    networks:
+      openclaw-internal:
+        ipv4_address: 172.30.0.10
 
   openclaw-gateway:
     container_name: openclaw-gateway
@@ -25,7 +52,9 @@ services:
     environment:
       HOME: /home/node
       TERM: xterm-256color
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
       OPENCLAW_AGENT_DIR: ${OPENCLAW_AGENT_DIR:-}
+      OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-debug}
       PI_CODING_AGENT_DIR: ${PI_CODING_AGENT_DIR:-}
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
       FEISHU_APP_ID_STEWARD: ${FEISHU_APP_ID_STEWARD:-}
@@ -41,25 +70,15 @@ services:
       TZ: ${OPENCLAW_TZ:-UTC}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
-      - ./start-gateway.sh:/usr/local/bin/start-gateway.sh:ro
-      - ./coder_acp_cmd.sh:/usr/local/bin/coder_acp_cmd.sh:ro
-      - ./myextensions:/home/node/.openclaw/extensions
-      - apt_archives:/var/cache/apt/archives/
-      - npm_archives:/root/.npm
-      - npm_archives:/home/node/.npm
       - ${OPENCLAW_CONFIG_DIR}/.ssh:/root/.ssh
       - ${OPENCLAW_CONFIG_DIR}/.ssh:/home/node/.ssh
       - ${OPENCLAW_CONFIG_DIR}/.gitconfig:/root/.gitconfig
       - ${OPENCLAW_CONFIG_DIR}/.gitconfig:/home/node/.gitconfig
-      - ${OPENCLAW_CONFIG_DIR}/projects:/projects
-      ## Uncomment the lines below to enable sandbox isolation
-      ## (agents.defaults.sandbox). Requires Docker CLI in the image
-      ## (build with --build-arg OPENCLAW_INSTALL_DOCKER_CLI=1) or use
-      ## scripts/docker/setup.sh with OPENCLAW_SANDBOX=1 for automated setup.
-      ## Set DOCKER_GID to the host's docker group GID (run: stat -c '%g' /var/run/docker.sock).
-      # - /var/run/docker.sock:/var/run/docker.sock
-    # group_add:
-    #   - "${DOCKER_GID:-999}"
+      - ./output:/output
+      - ./output/projects:/projects
+      - ./start-gateway.sh:/usr/local/bin/start-gateway.sh:ro
+      - ./coder_acp_cmd.sh:/usr/local/bin/coder_acp_cmd.sh:ro
+      - ./myextensions:/home/node/.openclaw/extensions
     ports:
       - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
       - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
@@ -75,7 +94,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "const https=require('node:https');const req=https.request({hostname:'127.0.0.1',port:18789,path:'/healthz',method:'GET',rejectUnauthorized:false},(res)=>{res.resume();process.exit(res.statusCode&&res.statusCode<500?0:1)});req.once('error',()=>process.exit(1));req.end();",
         ]
       interval: 30s
       timeout: 5s
@@ -84,34 +103,15 @@ services:
     networks:
       - local-llm-service
       - openclaw-internal
-
-  openclaw-cli:
-    image: ${OPENCLAW_IMAGE:-openclaw:local}
-    container_name: openclaw-cli
-    network_mode: "service:openclaw-gateway"
-    cap_drop:
-      - NET_RAW
-      - NET_ADMIN
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      HOME: /home/node
-      TERM: xterm-256color
-      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
-      BROWSER: echo
-      TZ: ${OPENCLAW_TZ:-UTC}
-    volumes:
-      - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
-    init: true
-    entrypoint: ["node", "dist/index.js"]
-    depends_on:
-      - openclaw-gateway
-
+      
 networks:
   local-llm-service:
     external: true
   openclaw-internal:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 
 volumes:
   apt_archives:

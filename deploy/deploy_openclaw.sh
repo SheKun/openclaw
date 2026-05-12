@@ -48,6 +48,10 @@ fi
 VERSION="${OPENCLAW_VERSION}-build202605091410"
 IMAGE_NAME="krepus.com/openclaw:${VERSION}"
 OPENCLAW_CONFIG_DIR="~/.openclaw"
+GATEWAY_TLS_CERT_PATH_HOST="${OPENCLAW_CONFIG_DIR}/gateway/tls/gateway-cert.pem"
+GATEWAY_TLS_KEY_PATH_HOST="${OPENCLAW_CONFIG_DIR}/gateway/tls/gateway-key.pem"
+GATEWAY_TLS_CERT_PATH_CONTAINER="/home/node/.openclaw/gateway/tls/gateway-cert.pem"
+GATEWAY_TLS_KEY_PATH_CONTAINER="/home/node/.openclaw/gateway/tls/gateway-key.pem"
 
 CONFIG_JSON_PATH="${SCRIPT_DIR}/openclaw_conf.json"
 if [ ! -f "$CONFIG_JSON_PATH" ]; then
@@ -107,6 +111,11 @@ BUNDLED_PLUGINS_TO_INSTALL=(
 CUSTOM_EXTENSIONS=(
   "guidance"
 ) 
+
+OPENCLAW_LOG_LEVEL="info"
+
+# exec node 配置
+EXEC_NODE_CONFIG_DIR="~/.exec_node"
 
 # Copilot Harness 服务配置
 COPILOT_VERSION="1.0.38" # 这里可以指定一个固定版本，或者留空以自动查询最新版本
@@ -234,37 +243,38 @@ echo "=> 复制部署文件到远程服务器 ..."
 scp "${SCRIPT_DIR}/docker-compose.yml" "$REMOTE_HOST:${DEPLOY_DIR}/"
 scp "${SCRIPT_DIR}/coding_harness/copilot/coder_entry.sh" "$REMOTE_HOST:${DEPLOY_DIR}/coder_entry.sh"
 scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.sh"
+scp "${SCRIPT_DIR}/exec_node_entry.sh" "$REMOTE_HOST:${DEPLOY_DIR}/exec_node_entry.sh"
 scp "${SCRIPT_DIR}/create_ssh_user.sh" "$REMOTE_HOST:${DEPLOY_DIR}/create_ssh_user.sh"
 scp "${SCRIPT_DIR}/coding_harness/copilot/coder_acp_cmd.sh" "$REMOTE_HOST:${DEPLOY_DIR}/coder_acp_cmd.sh"
 ssh "$REMOTE_HOST" "chmod +x ${DEPLOY_DIR}/*.sh"
 
-echo "=> 检查coder harness配置目录 ${CODER_HARNESS_CONFIG_DIR} ..."
+echo "=> 创建输出目录 ..."
 ssh "$REMOTE_HOST" "
-  echo '   => 创建 coder harness 配置目录 ...'
+  mkdir -p ${DEPLOY_DIR}/output/projects
+  mkdir -p ${DEPLOY_DIR}/output/wiki
+"
+
+echo "=> 创建 coder harness 配置目录${CODER_HARNESS_CONFIG_DIR} ..."
+ssh "$REMOTE_HOST" "
   mkdir -p ${CODER_HARNESS_CONFIG_DIR}
   mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh
   mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.copilot
 "
-echo "=> 复制 coder harness 配置文件到 ${CODER_HARNESS_CONFIG_DIR} ..."
-scp ${COPILOT_HARNESS_DIR}/copilot-instructions.md "$REMOTE_HOST:${CODER_HARNESS_CONFIG_DIR}/copilot-instructions.md"
-
 echo "=> 生成 SSH environment 文件 (Copilot BYOK 变量，通过卷挂载注入容器) ..."
 ssh "$REMOTE_HOST" "mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh"
 ssh "$REMOTE_HOST" "cat > ${CODER_HARNESS_CONFIG_DIR}/.ssh/environment && chmod 600 ${CODER_HARNESS_CONFIG_DIR}/.ssh/environment" <<EOF
 GH_TOKEN=${COPILOT_GITHUB_TOKEN:-}
 EOF
 
-echo "=> 检查配置目录 ${OPENCLAW_CONFIG_DIR} ..."
+echo "=> 创建配置目录${OPENCLAW_CONFIG_DIR}并初始化 OpenClaw 配置 ..."
 ssh "$REMOTE_HOST" "
-  echo '   => 创建配置目录并初始化 OpenClaw 配置 ...'
   mkdir -p ${OPENCLAW_CONFIG_DIR}
   mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh
   mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh/sockets
-  mkdir -p ${OPENCLAW_CONFIG_DIR}/projects
-  mkdir -p ${OPENCLAW_CONFIG_DIR}/wiki
+  mkdir -p ${OPENCLAW_CONFIG_DIR}/gateway/tls
 "
-echo "=> 复制配置文件 openclaw.json 到 ${OPENCLAW_CONFIG_DIR}/openclaw.json ..."
 scp ${SCRIPT_DIR}/openclaw_conf.json "$REMOTE_HOST:${OPENCLAW_CONFIG_DIR}/openclaw.json"
+scp ${SCRIPT_DIR}/exec-approvals.json "$REMOTE_HOST:${OPENCLAW_CONFIG_DIR}/exec-approvals.json"
 
 echo "=> 创建openclaw认证密钥对 ..."
 ssh "$REMOTE_HOST" "
@@ -304,19 +314,47 @@ ssh -t "$REMOTE_HOST" "
     --nologin
 "
 
+echo "=> 生成或复用网关 TLS 证书，并计算证书指纹 ..."
+ssh "$REMOTE_HOST" "
+  if [ ! -s ${GATEWAY_TLS_CERT_PATH_HOST} ] || [ ! -s ${GATEWAY_TLS_KEY_PATH_HOST} ]; then
+    echo '   => 未发现网关证书，正在生成 ...'
+    openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+      -keyout ${GATEWAY_TLS_KEY_PATH_HOST} \
+      -out ${GATEWAY_TLS_CERT_PATH_HOST} \
+      -subj '/CN=openclaw-gateway'
+    chmod 600 ${GATEWAY_TLS_KEY_PATH_HOST} ${GATEWAY_TLS_CERT_PATH_HOST}
+  else
+    echo '   => 检测到现有网关证书，继续复用。'
+  fi
+"
+RAW_GATEWAY_TLS_FINGERPRINT=$(ssh "$REMOTE_HOST" "openssl x509 -in ${GATEWAY_TLS_CERT_PATH_HOST} -noout -fingerprint -sha256 | sed -E 's/^[Ss][Hh][Aa]256 Fingerprint=//' | tr -d '\\r'")
+if [ -z "${RAW_GATEWAY_TLS_FINGERPRINT}" ]; then
+  echo "错误: 无法读取网关 TLS 证书指纹。"
+  exit 1
+fi
+OPENCLAW_GATEWAY_TLS_FINGERPRINT="SHA256:${RAW_GATEWAY_TLS_FINGERPRINT}"
+echo "   => 网关证书指纹: ${OPENCLAW_GATEWAY_TLS_FINGERPRINT}"
+
+echo "=> 创建配置目录${EXEC_NODE_CONFIG_DIR}并初始化 Exec Node 配置 ..."
+ssh "$REMOTE_HOST" "mkdir -p ${EXEC_NODE_CONFIG_DIR}"
+scp ${SCRIPT_DIR}/openclaw_conf_exec_node.json "$REMOTE_HOST:${EXEC_NODE_CONFIG_DIR}/openclaw.json"
+scp ${SCRIPT_DIR}/exec-approvals.json "$REMOTE_HOST:${EXEC_NODE_CONFIG_DIR}/exec-approvals.json"
+
 # 统一使用 .env：既用于 compose 变量替换，也为 service environment 提供取值
 echo "=> 生成 .env 文件 (compose + runtime 变量) ..."
 ssh "$REMOTE_HOST" "cat <<EOF > ${DEPLOY_DIR}/.env
+# OpenClaw Gateway 配置
 OPENCLAW_IMAGE=${IMAGE_NAME}
 CODER_COPILOT_IMAGE=${CODER_COPILOT_IMAGE}
 OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
-CODER_HARNESS_CONFIG_DIR=${CODER_HARNESS_CONFIG_DIR}
 OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}
 PI_CODING_AGENT_DIR=${DEFAULT_AGENT_DIR}
 OPENCLAW_PUB_KEY='${OPENCLAW_PUB_KEY}'
 OPENCLAW_TZ=${OPENCLAW_TZ:-UTC}
-
+OPENCLAW_LOG_LEVEL=${OPENCLAW_LOG_LEVEL:-debug}
 OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
+BUNDLED_PLUGINS_TO_INSTALL='${BUNDLED_PLUGINS_TO_INSTALL[*]:-}'
+
 COPILOT_GITHUB_TOKEN=${COPILOT_GITHUB_TOKEN:-}
 FEISHU_APP_ID_STEWARD=${FEISHU_APP_ID_STEWARD:-}
 FEISHU_APP_SECRET_STEWARD=${FEISHU_APP_SECRET_STEWARD:-}
@@ -327,7 +365,13 @@ FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
 LITELLM_API_KEY=${LITELLM_API_KEY:-}
 PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
 AGENT_SECRET_DB_PASSWORD=${AGENT_SECRET_DB_PASSWORD:-}
-BUNDLED_PLUGINS_TO_INSTALL='${BUNDLED_PLUGINS_TO_INSTALL[*]:-}'
+
+# Coder Harness 配置
+CODER_HARNESS_CONFIG_DIR=${CODER_HARNESS_CONFIG_DIR}
+
+# Exec Node 配置
+EXEC_NODE_CONFIG_DIR=${EXEC_NODE_CONFIG_DIR}
+OPENCLAW_GATEWAY_TLS_FINGERPRINT=${OPENCLAW_GATEWAY_TLS_FINGERPRINT}
 EOF
 "
 

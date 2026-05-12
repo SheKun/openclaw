@@ -1,0 +1,8 @@
+{
+  "tools": {
+    "exec": {
+      "security": "full",
+      "ask": "off"
+    }
+  }
+}
