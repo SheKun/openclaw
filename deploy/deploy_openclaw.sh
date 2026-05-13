@@ -306,6 +306,7 @@ EOF
   scp "${SCRIPT_DIR}/exec_node_entry.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/exec_node_entry.sh"
   scp "${SCRIPT_DIR}/create_ssh_user.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/create_ssh_user.sh"
   scp "${SCRIPT_DIR}/keepassxc-vault.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/keepassxc-vault.sh"
+  scp "${SCRIPT_DIR}/launch_chrome.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/launch_chrome.sh"
   ssh "${REMOTE_HOST}" "chmod 700 ${DEPLOY_DIR}/*.sh"
 }
 
@@ -515,45 +516,11 @@ print_success_guide() {
   echo "  podman exec -it openclaw-gateway openclaw devices list"
   echo "  podman exec -it openclaw-gateway openclaw devices approve <Request_ID>"
   echo ""
+  echo "若需使用browser工具，在宿主机桌面系统的终端上运行："
+  echo "  bash ${DEPLOY_DIR}/launch_chrome.sh"
+  echo ""
   echo "查看网关日志:"
   echo "  podman-compose logs -f openclaw-gateway"
-}
-
-ensure_host_chrome_running() {
-  substep "检查宿主机 Chrome 已启动且开启CDP..."
-
-  ssh -t "${REMOTE_HOST}" "
-    set -e
-
-    if pgrep -af 'google-chrome.*--remote-debugging-port=9222' >/dev/null 2>&1; then
-      echo '  -> 宿主机 Chrome 已在 9222 提供 CDP'
-      exit 0
-    fi
-
-    DISPLAY_ENV=\${DISPLAY:-:0}
-    CHROME_LOG=/tmp/openclaw-chrome.log
-
-    nohup env DISPLAY=\"\${DISPLAY_ENV}\" XAUTHORITY=\"\${XAUTHORITY:-\$HOME/.Xauthority}\" \
-      google-chrome \
-        --remote-debugging-port=9222 \
-        --user-data-dir=/tmp/openclaw-chrome \
-        --remote-allow-origins='*' \
-        --log-level=3 \
-        --new-window \
-        --window-position=0,0 \
-      >\"\${CHROME_LOG}\" 2>&1 < /dev/null &
-
-    for _ in \$(seq 1 20); do
-      if pgrep -af 'google-chrome.*--remote-debugging-port=9222' >/dev/null 2>&1; then
-        echo \"  -> 已启动 Chrome（DISPLAY=\${DISPLAY_ENV}, log=\${CHROME_LOG}）\"
-        exit 0
-      fi
-      sleep 1
-    done
-
-    echo 'Chrome 启动失败，请检查 /tmp/openclaw-chrome.log' >&2
-    exit 1
-  "
 }
 
 main() {
@@ -587,10 +554,7 @@ main() {
   step 5 "拷贝服务编排相关文件"
   copy_orchestration_files
 
-  step 6 "确保宿主机 Chrome 可用"
-  ensure_host_chrome_running
-
-  step 7 "启动编排"
+  step 6 "启动服务编排"
   start_orchestration
 
   print_success_guide
