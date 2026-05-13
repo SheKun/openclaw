@@ -25,6 +25,7 @@
   - [环境变量](#环境变量)
 - [部署流程](#部署流程)
   - [一键部署 OpenClaw](#一键部署-openclaw)
+  - [首次访问与设备配对](#首次访问与设备配对)
   - [OpenClaw 插件安装](#openclaw-插件安装)
 
 ---
@@ -115,7 +116,11 @@ deploy/
 ├── .env                        # 本地环境变量，包含所有密钥（不入库，见下方变量说明）
 ├── docker-compose.yml          # 定制化 Compose 编排文件
 ├── openclaw_conf.json          # OpenClaw 主配置（agents、channels、models、plugins）
+├── openclaw_conf_exec_node.json # Exec Node 配置
+├── exec-approvals.json         # Exec Node 与 Gateway 共享执行审批配置
 ├── start-gateway.sh            # Gateway 容器启动包装脚本
+├── exec_node_entry.sh          # Exec Node 容器入口脚本
+├── keepassxc-vault.sh          # Keepass secret provider 工具脚本
 ├── deploy_openclaw.sh          # 本地构建 + SSH 远程部署脚本
 ├── create_ssh_user.sh          # SSH 用户初始化工具（被 coder-copilot 容器调用）
 ├── buildkit/                   # BuildKit secret 配置（镜像源）
@@ -154,10 +159,11 @@ deploy/
 
 **1) 同一编排文件中的内部服务（`deploy/docker-compose.yml`）**
 
-| 服务               | 容器名           | 说明                                                                      |
-| ------------------ | ---------------- | ------------------------------------------------------------------------- |
-| `openclaw-gateway` | openclaw-gateway | OpenClaw 主网关，承载所有 agent 运行时                                    |
-| `coder-copilot`    | coder-copilot    | GitHub Copilot ACP Harness，通过 SSH 向 gateway 暴露 `copilot` 编码 agent |
+| 服务                 | 容器名             | 说明                                                                      |
+| -------------------- | ------------------ | ------------------------------------------------------------------------- |
+| `openclaw-gateway`   | openclaw-gateway   | OpenClaw 主网关，承载所有 agent 运行时                                    |
+| `openclaw-exec-node` | openclaw-exec-node | 代码执行节点，连接 Gateway 并复用同一套镜像与工具链                       |
+| `coder-copilot`      | coder-copilot      | GitHub Copilot ACP Harness，通过 SSH 向 gateway 暴露 `copilot` 编码 agent |
 
 **2) 编排外的外部服务（但被 OpenClaw 依赖）**
 
@@ -170,14 +176,20 @@ deploy/
 ### 网络拓扑
 
 - `openclaw-gateway` 同时加入三个网络：
-  - `openclaw-internal`：与 `coder-copilot` 通信（内部隔离网段）。
+  - `openclaw-internal`：与 `coder-copilot` 、`openclaw-exec-node`通信（内部隔离网段）。
   - `local-llm-service`：访问编排外的 `litellm-gateway`。
   - 宿主机默认容器网络（bridge）：用于访问公网端点，并作为到 `172.17.0.1:9222` 的宿主机侧可达路径。
-- `coder-copilot` 加入 `openclaw-internal`，为 gateway 提供服务。
+- `coder-copilot` 、`openclaw-exec-node`加入 `openclaw-internal`，为 gateway 提供服务。
 
 网络拓扑如下图所示：
 
 ```text
+     +---------------------+
+     | openclaw-exec-node  |
+     | (exec runtime)      |
+     +---------------------+
+                | # attach
+                |
           +------------------------------+      +------------------------------+
           | Network: openclaw-internal   |      | Network: local-llm-service   |
           +------------------------------+      +------------------------------+
@@ -203,6 +215,7 @@ deploy/
 Dependency arrows (依赖服务 -> 被依赖服务):
 
 openclaw-gateway  ----------SSH(ACPx/coder_acp_cmd.sh)----------> coder-copilot
+openclaw-exec-node --------HTTPS/WSS----------------------------> openclaw-gateway
 openclaw-gateway  ----------HTTP(baseUrl /v1)-------------------> litellm-gateway
 openclaw-gateway  ----------SSH tunnel(cdp_tunnel, 9222)-------> Host Chrome CDP (172.17.0.1:9222)
 openclaw-gateway  ----------HTTPS/WebSocket outbound-----------> GitHub / Feishu / Others
@@ -216,6 +229,9 @@ openclaw-gateway  ----------HTTPS/WebSocket outbound-----------> GitHub / Feishu
 - 访问模型服务 `litellm-gateway`：
   - `openclaw_conf.json` 中 provider `litellm.baseUrl=http://litellm-gateway:8081/v1`。
   - 因为 gateway 连接在 `local-llm-service` 网络上，可直接通过服务名解析访问。
+- 访问 `openclaw-exec-node`：
+  - `openclaw-exec-node` 容器主动注册为OpenClaw的一个node
+  - 读取 `OPENCLAW_GATEWAY_TOKEN` 与 `OPENCLAW_GATEWAY_TLS_FINGERPRINT`
 - 访问宿主机 Chrome CDP：
   - `start-gateway.sh` 启动时建立 SSH 隧道账号 `cdp_tunnel`，将容器内 `127.0.0.1:9222` 转发到宿主机 `172.17.0.1:9222`。
   - browser 插件随后通过本地 `9222` 访问到宿主机 Chrome 调试端口。
@@ -229,7 +245,39 @@ openclaw-gateway  ----------HTTPS/WebSocket outbound-----------> GitHub / Feishu
 
 ### 环境变量
 
-部署脚本会在部署服务器的部署目录下创建一个 `.env` 文件，包含容器编排中引用的所有环境变量（例如飞书 app secret、litellm api key 等）。你知道这个文件的存在即可，不要试图去读取它。
+部署脚本会在部署服务器侧写入三类运行时配置：
+
+- `${DEPLOY_DIR}/.env`：compose 变量与容器运行参数（镜像 tag、Gateway Token、日志等级、目录挂载等）。
+- `${OPENCLAW_CONFIG_DIR}/.env`：OpenClaw 明文配置（例如 Feishu App ID）。
+- `${DEPLOY_DIR}/secrets/openclaw-secrets.kdbx` 与 `${DEPLOY_DIR}/secrets/openclaw-secrets.pass`：Keepass 密钥库与解锁密码文件，供 secret provider 读取敏感值（例如 app secret、API key）。
+
+### 共享挂载
+
+主要为了服务化和安全考虑，`coder harness` 和 `exec` 等工具执行与 `openclaw-gateway` 解耦，由独立容器提供服务。为了让跨容器协作时路径无需转换，关键目录在多个容器中保持相同挂载路径。
+
+#### `openclaw-gateway` & `coder-copilot`
+
+- 项目工作目录 `${DEPLOY_DIR}/output/projects` -> `/projects`：让 ACP 编码 agent 在 `coder-copilot` 写入/修改的仓库文件，被 gateway 侧后续工具链在同一绝对路径直接读取。
+
+note:
+
+```
+- `coder-copilot` 的 SSH/Copilot 配置来自 `${CODER_HARNESS_CONFIG_DIR}`（挂载到 `/root/.ssh`、`/root/.copilot`），与 gateway 的 `${OPENCLAW_CONFIG_DIR}` 分离，避免凭据与运行态互相污染。
+```
+
+#### `openclaw-gateway` & `openclaw-exec-node`
+
+- `${OPENCLAW_CONFIG_DIR}` -> `/home/node/.openclaw`：agent能调用`exec`工具读取和修改OpenClaw配置、会话信息等
+- `${OPENCLAW_CONFIG_DIR}/.ssh` -> `/root/.ssh`、`/home/node/.ssh`：共享同一套 SSH 身份与 host 配置，保证 gateway/exec-node 访问策略一致，例如，远端git仓库
+- 容器卷 `apt_archives` -> `/var/cache/apt/archives/`：缓存 apt 包下载，加速 exec-node 依赖安装，gateway和agent（通过`exec`）都可能触发 `apt install`
+- 容器卷 `npm_archives` -> `/root/.npm`、`/home/node/.npm`：缓存 npm 包元数据与离线存储，加速依赖安装和离线构建，gateway和agent（通过`exec`）都可能触发 `npm install`
+
+note：
+
+```
+- `openclaw-exec-node` 的节点本地状态目录单独挂载 `${EXEC_NODE_CONFIG_DIR}:/home/node/.exec_node`，不会与 gateway 状态目录混用。
+- `${OPENCLAW_CONFIG_DIR}/output` 仅挂载到 `openclaw-exec-node`，因为agent需要调用`exec`工具才能读写此目录
+```
 
 ---
 
@@ -248,19 +296,43 @@ bash deploy/deploy_openclaw.sh my-server
 主要逻辑：
 
 1. 加载 `../.env`（全局）和 `deploy/.env`（本地）环境变量。
-2. 从 `package.json` 读取版本号，拼装镜像 tag（`krepus.com/openclaw:<version>-build<timestamp>`）。
-3. 构建 OpenClaw 主镜像（传递 `OPENCLAW_DOCKER_JS_PACKAGES`、`OPENCLAW_INSTALL_BROWSER=1` 等 build-arg）。
-4. 构建 `coder-copilot` Harness 镜像（`krepus.com/coder-copilot:<copilot_version>`）。
-5. 导出两个镜像为 `.tar.gz`，通过 SSH 传输到目标主机并导入。
-6. 将配置文件、容器中用到的脚本以及选装的插件打包传输到部署目录。
-7. 在目标主机初始化运行目录，并生成环境变量文件。
-8. 执行 `docker compose up -d` 拉起服务。
+2. 生成 Keepass 密钥库并写入部署所需敏感配置。
+3. 从 `package.json` 读取版本号，拼装镜像 tag（当前脚本使用固定构建后缀：`krepus.com/openclaw:<version>-build202605091410`）。
+4. 构建 OpenClaw 主镜像（传递 `OPENCLAW_EXTENSIONS`、`OPENCLAW_DOCKER_JS_PACKAGES`、`OPENCLAW_DOCKER_APT_PACKAGES` 等 build-arg）。
+5. 构建 `coder-copilot` Harness 镜像（`krepus.com/coder-copilot:<copilot_version>`）。
+6. 使用 `docker save | ssh ... podman load` 将镜像直接导入目标主机。
+7. 同步 compose、入口脚本、OpenClaw 配置、审批配置、Keepass 密钥库及自定义插件包。
+8. 在目标主机生成或复用 Gateway Token 与 TLS 证书，计算并注入 TLS 指纹给 Exec Node。
+9. 检查 `local-llm-service` 网络与 `litellm-gateway` 健康状态。
+10. 执行 `podman-compose down && podman-compose up -d` 拉起服务。
+
+注意：
+
+- 部署脚本默认目标主机为 `rmbook`，可通过参数覆盖。
+- 脚本要求本地具备 `docker`、`pnpm`、`keepassxc-cli`、`node`，远程具备 `podman` 与 `podman-compose`。
+
+### 首次访问与设备配对
+
+部署完成后，推荐通过 HTTPS 访问控制台并完成设备配对：
+
+1. 本地 hosts 增加：`<服务器IP> openclaw.local`。
+2. 首次访问：`https://openclaw.local:18789/?token=<OPENCLAW_GATEWAY_TOKEN>`。
+3. 若提示 `pairing required`，在服务器执行：
+
+```bash
+podman exec -it openclaw-gateway openclaw devices list
+podman exec -it openclaw-gateway openclaw devices approve <Request_ID>
+```
+
+4. 批准后去掉 `?token=...` 刷新访问。
 
 ### OpenClaw 插件安装
 
-插件分为 `预装` 和 `选装` 两类：
+插件分为 `预装`、`选装 tgz`、`按名称安装内置插件` 三类：
 
 - 预装插件连同其依赖库将直接打包进 OpenClaw 镜像，详见 `Dockerfile`。
-- 选装插件列表在部署脚本 `deploy_openclaw.sh` 中定义，打包传输到部署目录并挂载在 openclaw-gateway 容器上，由 `start-gateway.sh` 在 Gateway 启动时自动检测并安装。
+- 选装 tgz 插件由部署脚本编译并通过 `pnpm pack` 打包到 `deploy/myextensions/dist`，再上传到远程 `${DEPLOY_DIR}/myextensions`。
+- `start-gateway.sh` 会自动扫描 `/home/node/.openclaw/extensions/*.tgz`，执行 `openclaw plugins install` 和 `openclaw plugins enable`。
+- 通过 `BUNDLED_PLUGINS_TO_INSTALL` 指定的插件名称（例如 `memory-wiki`）会在容器启动时按名称安装并启用。
 
 ---

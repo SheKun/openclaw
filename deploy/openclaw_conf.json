@@ -362,7 +362,14 @@
         },
         "tools": {
           "profile": "full",
-          "alsoAllow": ["lobster", "llm-task"]
+          "alsoAllow": ["lobster", "llm-task"],
+          "deny": [
+            "group:memory-wiki",
+            "canvas",
+            "image_generate",
+            "music_generate",
+            "video_generate"
+          ]
         },
         "skills": [
           "clawhub",
@@ -403,7 +410,7 @@
         },
         "tools": {
           "profile": "minimal",
-          "alsoAllow": ["group:fs", "group:sessions", "group:memory", "group:agents"]
+          "alsoAllow": ["group:fs", "group:sessions", "group:memory", "group:agents", "exec"]
         },
         "skills": ["wiki-create", "weather"]
       },
@@ -418,7 +425,7 @@
         },
         "tools": {
           "profile": "minimal",
-          "alsoAllow": ["browser", "group:web", "read", "write", "exec"]
+          "alsoAllow": ["group:fs", "group:web", "browser", "exec"]
         },
         "skills": ["browser-automation", "wiki-create", "ctrip-travel-search"]
       }
