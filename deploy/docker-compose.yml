@@ -73,6 +73,7 @@ services:
       - ./secrets/openclaw-secrets.kdbx:/run/openclaw-secrets/openclaw-secrets.kdbx:ro
       - ./secrets/openclaw-secrets.pass:/run/openclaw-secrets/openclaw-secrets.pass:ro
       - ./myextensions:/home/node/.openclaw/extensions
+      - ./output/projects:/projects
       - apt_archives:/var/cache/apt/archives/
       - npm_archives:/root/.npm
       - npm_archives:/home/node/.npm

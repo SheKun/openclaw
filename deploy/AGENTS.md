@@ -257,7 +257,7 @@ openclaw-gateway  ----------HTTPS/WebSocket outbound-----------> GitHub / Feishu
 
 #### `openclaw-gateway` & `coder-copilot`
 
-- 项目工作目录 `${DEPLOY_DIR}/output/projects` -> `/projects`：让 ACP 编码 agent 在 `coder-copilot` 写入/修改的仓库文件，被 gateway 侧后续工具链在同一绝对路径直接读取。
+- 项目工作目录 `${DEPLOY_DIR}/output/projects` -> `/projects`：gateway将/projects设置为ACP agent coder的工作目录(CWD)，因此/projects需要在两个容器都存在
 
 note:
 
