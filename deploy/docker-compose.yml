@@ -29,6 +29,8 @@ services:
       OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-debug}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
+      - ${OPENCLAW_CONFIG_DIR}/.ssh:/root/.ssh
+      - ${OPENCLAW_CONFIG_DIR}/.ssh:/home/node/.ssh
       - ${EXEC_NODE_CONFIG_DIR}:/home/node/.exec_node
       - apt_archives:/var/cache/apt/archives/
       - npm_archives:/root/.npm
@@ -57,15 +59,6 @@ services:
       OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-debug}
       PI_CODING_AGENT_DIR: ${PI_CODING_AGENT_DIR:-}
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
-      FEISHU_APP_ID_STEWARD: ${FEISHU_APP_ID_STEWARD:-}
-      FEISHU_APP_SECRET_STEWARD: ${FEISHU_APP_SECRET_STEWARD:-}
-      FEISHU_APP_ID_CODER: ${FEISHU_APP_ID_CODER:-}
-      FEISHU_APP_SECRET_CODER: ${FEISHU_APP_SECRET_CODER:-}
-      FEISHU_APP_ID_PLANNER: ${FEISHU_APP_ID_PLANNER:-}
-      FEISHU_APP_SECRET_PLANNER: ${FEISHU_APP_SECRET_PLANNER:-}
-      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
-      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
-      AGENT_SECRET_DB_PASSWORD: ${AGENT_SECRET_DB_PASSWORD:-}
       BUNDLED_PLUGINS_TO_INSTALL: ${BUNDLED_PLUGINS_TO_INSTALL:-}
       TZ: ${OPENCLAW_TZ:-UTC}
     volumes:
@@ -78,6 +71,9 @@ services:
       - ./output/projects:/projects
       - ./start-gateway.sh:/usr/local/bin/start-gateway.sh:ro
       - ./coder_acp_cmd.sh:/usr/local/bin/coder_acp_cmd.sh:ro
+      - ./keepassxc-vault.sh:/usr/local/bin/keepassxc-vault.sh:ro
+      - ./secrets/openclaw-secrets.kdbx:/run/openclaw-secrets/openclaw-secrets.kdbx:ro
+      - ./secrets/openclaw-secrets.pass:/run/openclaw-secrets/openclaw-secrets.pass:ro
       - ./myextensions:/home/node/.openclaw/extensions
     ports:
       - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"

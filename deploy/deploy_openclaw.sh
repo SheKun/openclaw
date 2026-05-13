@@ -39,6 +39,52 @@ if [ -f "$LOCAL_ENV_FILE" ]; then
   set -a; source <(sed 's/\r//' "$LOCAL_ENV_FILE"); set +a
 fi
 
+echo "本地打包密钥库 ..."
+LOCAL_SECRET_BUNDLE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/openclaw-secret-bundle.XXXXXX")"
+LOCAL_SECRET_BUNDLE_DB_PATH="${LOCAL_SECRET_BUNDLE_DIR}/openclaw-secrets.kdbx"
+LOCAL_SECRET_BUNDLE_PASS_PATH="${LOCAL_SECRET_BUNDLE_DIR}/openclaw-secrets.pass"
+cleanup_secret_bundle() {
+  rm -rf "${LOCAL_SECRET_BUNDLE_DIR}"
+}
+trap cleanup_secret_bundle EXIT
+
+upsert_keepass_secret() {
+  local entry_path="$1"
+  local secret_value="$2"
+  local group_path="${entry_path%/*}"
+
+  if [ "$group_path" != "$entry_path" ]; then
+    echo "${AGENT_SECRET_DB_PASSWORD}" |
+      keepassxc-cli mkdir -q "${LOCAL_SECRET_BUNDLE_DB_PATH}" "$group_path" >/dev/null 2>&1 || true
+  fi
+
+  printf '%s\n%s\n%s\n' "${AGENT_SECRET_DB_PASSWORD}" "$secret_value" "$secret_value" |
+    keepassxc-cli add -q -u "openclaw" -p "${LOCAL_SECRET_BUNDLE_DB_PATH}" "$entry_path" >/dev/null 2>&1
+}
+
+build_keepass_secret_bundle() {
+  if ! command -v keepassxc-cli >/dev/null 2>&1; then
+    echo "错误: 未找到 keepassxc-cli，无法生成 Keepass 密钥库。"
+    exit 1
+  fi
+
+  printf '%s\n%s\n' "${AGENT_SECRET_DB_PASSWORD}" "${AGENT_SECRET_DB_PASSWORD}" |
+    keepassxc-cli db-create -q -p "${LOCAL_SECRET_BUNDLE_DB_PATH}" >/dev/null 2>&1
+
+  upsert_keepass_secret "feishu/stewardAppSecret" "${FEISHU_APP_SECRET_STEWARD}"
+  upsert_keepass_secret "feishu/coderAppSecret" "${FEISHU_APP_SECRET_CODER}"
+  upsert_keepass_secret "feishu/plannerAppSecret" "${FEISHU_APP_SECRET_PLANNER}"
+  upsert_keepass_secret "litellm/apiKey" "${LITELLM_API_KEY}"
+  upsert_keepass_secret "perplexity/apiKey" "${PERPLEXITY_API_KEY:-}"
+  upsert_keepass_secret "agent/secretDbPassword" "${AGENT_SECRET_DB_PASSWORD}"
+
+  printf '%s' "${AGENT_SECRET_DB_PASSWORD}" > "${LOCAL_SECRET_BUNDLE_PASS_PATH}"
+  chmod 600 "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${LOCAL_SECRET_BUNDLE_PASS_PATH}"
+}
+
+echo "=> 在本机打包 Keepass 密钥库 (deploy secrets bundle) ..."
+build_keepass_secret_bundle
+
 # openclaw 服务配置
 OPENCLAW_VERSION=$(grep -m1 '"version":' package.json | awk -F'"' '{print $4}')
 if [ -z "$OPENCLAW_VERSION" ]; then
@@ -143,7 +189,9 @@ COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=393216
 # 远程部署配置
 REMOTE_HOST="${1:-rmbook}"
 DEPLOY_DIR="~/openclaw-deploy"
-
+REMOTE_SECRETS_DIR="${DEPLOY_DIR}/secrets"
+REMOTE_KEEPASS_DB_PATH="${REMOTE_SECRETS_DIR}/openclaw-secrets.kdbx"
+REMOTE_KEEPASS_PASS_PATH="${REMOTE_SECRETS_DIR}/openclaw-secrets.pass"
 
 echo "1. 检查是否存在镜像 ${IMAGE_NAME} ..."
 if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
@@ -171,7 +219,6 @@ else
     "${DOCKER_BUILD_SECRET_ARGS[@]}" \
     --build-arg "BASE_IMAGE=${COPILOT_HARNESS_BASE_IMAGE}" \
     --build-arg "COPILOT_VERSION=${COPILOT_VERSION}" \
-    --secret id=GH_TOKEN,env=COPILOT_GITHUB_TOKEN \
     -t "${CODER_COPILOT_IMAGE}" \
     -f "${COPILOT_HARNESS_DIR}/Dockerfile" "${COPILOT_HARNESS_DIR}"
 fi
@@ -195,35 +242,6 @@ fi
 echo "5. 准备部署文件 ..."
 ssh "$REMOTE_HOST" "mkdir -p ${DEPLOY_DIR}"
 
-# 从 KeePass 密码库中读取密钥，生成 secret_file.json
-echo "从 KeePass 密码库中加载密钥..."
-KEEPASS_FILE="${SCRIPT_DIR}/../../keepass.kdbx"
-if [ ! -f "$KEEPASS_FILE" ]; then
-  echo "错误: 未找到 KeePass 密码库文件 (${KEEPASS_FILE})"
-  exit 1
-fi
-
-FEISHU_APP_STEWARD_SLOT_PATH="飞书/家庭/FEISHU_APP_STEWARD"
-FEISHU_APP_PLANNER_SLOT_PATH="飞书/家庭/FEISHU_APP_PLANNER"
-FEISHU_APP_CODER_SLOT_PATH="飞书/家庭/FEISHU_APP_CODER"
-
-# 辅助函数: 从 KeePass 条目读取 UserName 属性（对应 AppID）
-kp_username() {
-  echo "${KEEPASS_PASSWORD}" | keepassxc-cli show -q -a UserName "$KEEPASS_FILE" "$1" 2>&1
-}
-
-# 辅助函数: 从 KeePass 条目读取 Password 属性（对应 AppSecret / API Key）
-kp_password() {
-  echo "${KEEPASS_PASSWORD}" | keepassxc-cli show -q -a Password "$KEEPASS_FILE" "$1" 2>&1
-}
-
-FEISHU_APP_ID_STEWARD=$(kp_username "${FEISHU_APP_STEWARD_SLOT_PATH}")
-FEISHU_APP_SECRET_STEWARD=$(kp_password "${FEISHU_APP_STEWARD_SLOT_PATH}")
-FEISHU_APP_ID_CODER=$(kp_username "${FEISHU_APP_CODER_SLOT_PATH}")
-FEISHU_APP_SECRET_CODER=$(kp_password "${FEISHU_APP_CODER_SLOT_PATH}")
-FEISHU_APP_ID_PLANNER=$(kp_username "${FEISHU_APP_PLANNER_SLOT_PATH}")
-FEISHU_APP_SECRET_PLANNER=$(kp_password "${FEISHU_APP_PLANNER_SLOT_PATH}")
-
 echo "6. 在远程服务器初始化与启动服务 ..."
 # 检查是否已有 .env 并提取 Gateway Token
 EXISTING_TOKEN=$(ssh "$REMOTE_HOST" "if [ -f ${DEPLOY_DIR}/.env ]; then grep '^OPENCLAW_GATEWAY_TOKEN=' ${DEPLOY_DIR}/.env | cut -d'=' -f2 | tr -d '\\\"'; fi" || true)
@@ -246,7 +264,14 @@ scp "${SCRIPT_DIR}/start-gateway.sh" "$REMOTE_HOST:${DEPLOY_DIR}/start-gateway.s
 scp "${SCRIPT_DIR}/exec_node_entry.sh" "$REMOTE_HOST:${DEPLOY_DIR}/exec_node_entry.sh"
 scp "${SCRIPT_DIR}/create_ssh_user.sh" "$REMOTE_HOST:${DEPLOY_DIR}/create_ssh_user.sh"
 scp "${SCRIPT_DIR}/coding_harness/copilot/coder_acp_cmd.sh" "$REMOTE_HOST:${DEPLOY_DIR}/coder_acp_cmd.sh"
-ssh "$REMOTE_HOST" "chmod +x ${DEPLOY_DIR}/*.sh"
+scp "${SCRIPT_DIR}/keepassxc-vault.sh" "$REMOTE_HOST:${DEPLOY_DIR}/keepassxc-vault.sh"
+ssh "$REMOTE_HOST" "chmod 700 ${DEPLOY_DIR}/*.sh"
+
+echo "=> 复制 Keepass 密钥库到远程服务器 ..."
+ssh "$REMOTE_HOST" "mkdir -p ${REMOTE_SECRETS_DIR}"
+scp "${LOCAL_SECRET_BUNDLE_DB_PATH}" "$REMOTE_HOST:${REMOTE_KEEPASS_DB_PATH}"
+scp "${LOCAL_SECRET_BUNDLE_PASS_PATH}" "$REMOTE_HOST:${REMOTE_KEEPASS_PASS_PATH}"
+ssh "$REMOTE_HOST" "chmod 600 ${REMOTE_KEEPASS_DB_PATH} ${REMOTE_KEEPASS_PASS_PATH}"
 
 echo "=> 创建输出目录 ..."
 ssh "$REMOTE_HOST" "
@@ -275,6 +300,15 @@ ssh "$REMOTE_HOST" "
 "
 scp ${SCRIPT_DIR}/openclaw_conf.json "$REMOTE_HOST:${OPENCLAW_CONFIG_DIR}/openclaw.json"
 scp ${SCRIPT_DIR}/exec-approvals.json "$REMOTE_HOST:${OPENCLAW_CONFIG_DIR}/exec-approvals.json"
+
+ssh "$REMOTE_HOST" "cat <<EOF > ${OPENCLAW_CONFIG_DIR}/.env
+# OpenClaw 配置和启动脚本所需的明文环境变量
+# 敏感环境变量通过secret provider提供
+FEISHU_APP_ID_STEWARD: ${FEISHU_APP_ID_STEWARD:-}
+FEISHU_APP_ID_CODER: ${FEISHU_APP_ID_CODER:-}
+FEISHU_APP_ID_PLANNER: ${FEISHU_APP_ID_PLANNER:-}
+EOF
+"
 
 echo "=> 创建openclaw认证密钥对 ..."
 ssh "$REMOTE_HOST" "
@@ -345,33 +379,26 @@ echo "=> 生成 .env 文件 (compose + runtime 变量) ..."
 ssh "$REMOTE_HOST" "cat <<EOF > ${DEPLOY_DIR}/.env
 # OpenClaw Gateway 配置
 OPENCLAW_IMAGE=${IMAGE_NAME}
-CODER_COPILOT_IMAGE=${CODER_COPILOT_IMAGE}
 OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
 OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}
 PI_CODING_AGENT_DIR=${DEFAULT_AGENT_DIR}
-OPENCLAW_PUB_KEY='${OPENCLAW_PUB_KEY}'
 OPENCLAW_TZ=${OPENCLAW_TZ:-UTC}
 OPENCLAW_LOG_LEVEL=${OPENCLAW_LOG_LEVEL:-debug}
-OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
 BUNDLED_PLUGINS_TO_INSTALL='${BUNDLED_PLUGINS_TO_INSTALL[*]:-}'
-
-COPILOT_GITHUB_TOKEN=${COPILOT_GITHUB_TOKEN:-}
-FEISHU_APP_ID_STEWARD=${FEISHU_APP_ID_STEWARD:-}
-FEISHU_APP_SECRET_STEWARD=${FEISHU_APP_SECRET_STEWARD:-}
-FEISHU_APP_ID_CODER=${FEISHU_APP_ID_CODER:-}
-FEISHU_APP_SECRET_CODER=${FEISHU_APP_SECRET_CODER:-}
-FEISHU_APP_ID_PLANNER=${FEISHU_APP_ID_PLANNER:-}
-FEISHU_APP_SECRET_PLANNER=${FEISHU_APP_SECRET_PLANNER:-}
-LITELLM_API_KEY=${LITELLM_API_KEY:-}
-PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
-AGENT_SECRET_DB_PASSWORD=${AGENT_SECRET_DB_PASSWORD:-}
+OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
+FEISHU_APP_ID_STEWARD=${FEISHU_APP_ID_STEWARD}
+FEISHU_APP_ID_CODER=${FEISHU_APP_ID_CODER}
+FEISHU_APP_ID_PLANNER=${FEISHU_APP_ID_PLANNER}
 
 # Coder Harness 配置
 CODER_HARNESS_CONFIG_DIR=${CODER_HARNESS_CONFIG_DIR}
+CODER_COPILOT_IMAGE=${CODER_COPILOT_IMAGE}
+OPENCLAW_PUB_KEY='${OPENCLAW_PUB_KEY}'
 
 # Exec Node 配置
 EXEC_NODE_CONFIG_DIR=${EXEC_NODE_CONFIG_DIR}
 OPENCLAW_GATEWAY_TLS_FINGERPRINT=${OPENCLAW_GATEWAY_TLS_FINGERPRINT}
+OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
 EOF
 "
 

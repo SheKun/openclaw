@@ -169,8 +169,11 @@
       "default": { "source": "env" },
       "vault": {
         "source": "exec",
-        "command": "/usr/bin/keepassxc-cli",
-        "args": ["-q", "-a", "password", "${VAULT_DB_PATH}"],
+        "command": "/usr/local/bin/keepassxc-vault.sh",
+        "args": [
+          "/run/openclaw-secrets/openclaw-secrets.kdbx",
+          "/run/openclaw-secrets/openclaw-secrets.pass"
+        ],
         "passEnv": [],
         "jsonOnly": false
       }
@@ -208,17 +211,6 @@
     "install": {
       "preferBrew": true,
       "nodeManager": "npm"
-    },
-    "entries": {
-      "keepassxc": {
-        "enabled": true,
-        "env": {
-          "KEEPASS_DB_PASS": "${AGENT_SECRET_DB_PASSWORD}"
-        },
-        "config": {
-          "dbPath": "~/.openclaw/secrets.kdbx"
-        }
-      }
     }
   },
   "tools": {
@@ -380,7 +372,6 @@
           "taskflow",
           "healthcheck",
           "node-connect",
-          "keepassxc",
           "session-logs",
           "weather",
           "obsidian",
@@ -485,15 +476,27 @@
       "accounts": {
         "steward": {
           "appId": "${FEISHU_APP_ID_STEWARD}",
-          "appSecret": "${FEISHU_APP_SECRET_STEWARD}"
+          "appSecret": {
+            "source": "exec",
+            "provider": "vault",
+            "id": "feishu/stewardAppSecret"
+          }
         },
         "coder": {
           "appId": "${FEISHU_APP_ID_CODER}",
-          "appSecret": "${FEISHU_APP_SECRET_CODER}"
+          "appSecret": {
+            "source": "exec",
+            "provider": "vault",
+            "id": "feishu/coderAppSecret"
+          }
         },
         "planner": {
           "appId": "${FEISHU_APP_ID_PLANNER}",
-          "appSecret": "${FEISHU_APP_SECRET_PLANNER}"
+          "appSecret": {
+            "source": "exec",
+            "provider": "vault",
+            "id": "feishu/plannerAppSecret"
+          }
         }
       }
     }
@@ -502,7 +505,11 @@
     "providers": {
       "litellm": {
         "baseUrl": "http://litellm-gateway:8081/v1",
-        "apiKey": "${LITELLM_API_KEY}",
+        "apiKey": {
+          "source": "exec",
+          "provider": "vault",
+          "id": "litellm/apiKey"
+        },
         "api": "openai-completions",
         "models": [
           {
@@ -541,7 +548,11 @@
       },
       "openai": {
         "baseUrl": "http://litellm-gateway:8081/v1",
-        "apiKey": "${LITELLM_API_KEY}",
+        "apiKey": {
+          "source": "exec",
+          "provider": "vault",
+          "id": "litellm/apiKey"
+        },
         "models": [
           {
             "id": "text-embedding-v4",
