@@ -76,7 +76,7 @@
 
 - 从 `plugins.entries.guidance.config.files` 配置的文件列表中读取 Markdown 内容。
 - 通过 `registerContextEngine` 将内容注入每次对话的 system prompt addition。
-- 当前注入的文件：`workspace-shared/AGENTS.md`、`TOOLS.md`、`SOUL.md`、`USER.md`（相对于 `~/.openclaw`）。
+- 当前注入的文件：目录`/workspaces/`下的`AGENTS.md`、`TOOLS.md`、`SOUL.md`、`USER.md`。
 - 通过 `plugins.slots.contextEngine: "public-guidance"` 激活为默认上下文引擎。
 
 #### browser 导航超时可配置化
@@ -267,10 +267,10 @@ note:
 
 #### `openclaw-gateway` & `openclaw-exec-node`
 
-- `${OPENCLAW_CONFIG_DIR}` -> `/home/node/.openclaw`：agent能调用`exec`工具读取和修改OpenClaw配置、会话信息等
-- `${OPENCLAW_CONFIG_DIR}/.ssh` -> `/root/.ssh`、`/home/node/.ssh`：共享同一套 SSH 身份与 host 配置，保证 gateway/exec-node 访问策略一致，例如，远端git仓库
+- `${OPENCLAW_CONFIG_DIR}/.ssh` -> `/home/node/.ssh`：共享同一套 SSH 身份与 host 配置，保证 gateway/exec-node 访问策略一致，例如，远端git仓库
+- `${DEPLOY_DIR}/workspaces` -> `/workspaces`: agent工作目录的根目录，gateway配置需要引用，同时agent也需要通过`exec`工具访问
 - 容器卷 `apt_archives` -> `/var/cache/apt/archives/`：缓存 apt 包下载，加速 exec-node 依赖安装，gateway和agent（通过`exec`）都可能触发 `apt install`
-- 容器卷 `npm_archives` -> `/root/.npm`、`/home/node/.npm`：缓存 npm 包元数据与离线存储，加速依赖安装和离线构建，gateway和agent（通过`exec`）都可能触发 `npm install`
+- 容器卷 `npm_archives` -> `/home/node/.npm`：缓存 npm 包元数据与离线存储，加速依赖安装和离线构建，gateway和agent（通过`exec`）都可能触发 `npm install`
 
 note：
 

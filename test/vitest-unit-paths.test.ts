@@ -7,6 +7,10 @@ describe("isUnitConfigTestFile", () => {
     expect(isUnitConfigTestFile("packages/plugin-package-contract/src/index.test.ts")).toBe(true);
   });
 
+  it("accepts deploy myextensions tests", () => {
+    expect(isUnitConfigTestFile("deploy/myextensions/guidance/index.test.ts")).toBe(true);
+  });
+
   it("rejects files excluded from the unit config", () => {
     expect(
       isUnitConfigTestFile(

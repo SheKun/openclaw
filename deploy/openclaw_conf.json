@@ -6,7 +6,12 @@
     "nodes": {
       "pairing": {
         "autoApproveCidrs": ["172.30.0.10/32"]
-      }
+      },
+      "browser": {
+        "mode": "off"
+      },
+      "allowCommands": [],
+      "denyCommands": []
     },
     "auth": {
       "mode": "token"
@@ -109,12 +114,8 @@
       "guidance": {
         "enabled": true,
         "config": {
-          "files": [
-            "workspace-shared/AGENTS.md",
-            "workspace-shared/TOOLS.md",
-            "workspace-shared/SOUL.md",
-            "workspace-shared/USER.md"
-          ]
+          "rootDir": "/workspaces/shared",
+          "files": ["AGENTS.md", "TOOLS.md", "SOUL.md", "USER.md"]
         }
       },
       "memory-wiki": {
@@ -204,7 +205,7 @@
       "obsidian"
     ],
     "load": {
-      "extraDirs": ["~/.openclaw/workspace-shared/skills"],
+      "extraDirs": ["/workspaces/shared/skills"],
       "watch": true,
       "watchDebounceMs": 250
     },
@@ -354,7 +355,7 @@
         "id": "steward",
         "default": true,
         "name": "Adam",
-        "workspace": "~/.openclaw/workspace-steward",
+        "workspace": "/workspaces/steward",
         "agentDir": "~/.openclaw/agents/steward/agent",
         "model": "litellm/qwen3.6-plus",
         "subagents": {
@@ -388,7 +389,7 @@
       {
         "id": "coder",
         "name": "Ape",
-        "workspace": "~/.openclaw/workspace-coder",
+        "workspace": "/workspaces/coder",
         "runtime": {
           "type": "acp",
           "acp": {
@@ -402,7 +403,7 @@
       {
         "id": "planner",
         "name": "Fox",
-        "workspace": "~/.openclaw/workspace-planner",
+        "workspace": "/workspaces/planner",
         "agentDir": "~/.openclaw/agents/planner/agent",
         "model": "litellm/qwen3.6-flash",
         "subagents": {
@@ -417,7 +418,7 @@
       {
         "id": "crawler",
         "name": "Spider",
-        "workspace": "~/.openclaw/workspace-crawler",
+        "workspace": "/workspaces/crawler",
         "agentDir": "~/.openclaw/agents/crawler/agent",
         "model": "litellm/qwen3.6-flash",
         "subagents": {

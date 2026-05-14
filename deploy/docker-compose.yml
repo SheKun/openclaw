@@ -1,13 +1,17 @@
+x-podman:
+  in_pod: false
+
 services:
   coder-copilot:
     container_name: coder-copilot
     image: ${CODER_COPILOT_IMAGE:-coder-copilot:latest}
+    userns_mode: "keep-id:uid=1000,gid=1000"
     user: "root"
     environment:
       OPENCLAW_PUB_KEY: ${OPENCLAW_PUB_KEY:-}
+      CODER_USER_NAME: ${CODER_USER_NAME:-openclaw}
     volumes:
-      - ${CODER_HARNESS_CONFIG_DIR}/.ssh:/root/.ssh
-      - ${CODER_HARNESS_CONFIG_DIR}/.copilot:/root/.copilot
+      - ${CODER_HARNESS_CONFIG_DIR}:/home/${CODER_USER_NAME}
       - ./output/projects:/projects
       - ./coder_entry.sh:/entrypoint.sh:ro
       - ./create_ssh_user.sh:/create_ssh_user.sh:ro
@@ -20,23 +24,21 @@ services:
   openclaw-exec-node:
     container_name: openclaw-exec-node
     image: ${OPENCLAW_IMAGE:-openclaw:local}
-    user: "root"
+    userns_mode: "keep-id:uid=1000,gid=1000"
+    user: "node"
     environment:
       HOME: /home/node
-      OPENCLAW_STATE_DIR: /home/node/.exec_node
       OPENCLAW_GATEWAY_TLS_FINGERPRINT: ${OPENCLAW_GATEWAY_TLS_FINGERPRINT:-}
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
       OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-debug}
     volumes:
-      - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
-      - ${OPENCLAW_CONFIG_DIR}/.ssh:/root/.ssh
+      - ${EXEC_NODE_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_CONFIG_DIR}/.ssh:/home/node/.ssh
-      - ${EXEC_NODE_CONFIG_DIR}:/home/node/.exec_node
       - apt_archives:/var/cache/apt/archives/
-      - npm_archives:/root/.npm
       - npm_archives:/home/node/.npm
       - ./exec_node_entry.sh:/usr/local/bin/exec_node_entry.sh:ro
       - ./output:/output
+      - ./workspaces:/workspaces
     init: true
     depends_on:
       openclaw-gateway:
@@ -50,7 +52,8 @@ services:
     container_name: openclaw-gateway
     image: ${OPENCLAW_IMAGE:-openclaw:local}
     shm_size: '1gb'
-    user: "root"
+    userns_mode: "keep-id:uid=1000,gid=1000"
+    user: "node"
     environment:
       HOME: /home/node
       TERM: xterm-256color
@@ -63,9 +66,7 @@ services:
       TZ: ${OPENCLAW_TZ:-UTC}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
-      - ${OPENCLAW_CONFIG_DIR}/.ssh:/root/.ssh
       - ${OPENCLAW_CONFIG_DIR}/.ssh:/home/node/.ssh
-      - ${OPENCLAW_CONFIG_DIR}/.gitconfig:/root/.gitconfig
       - ${OPENCLAW_CONFIG_DIR}/.gitconfig:/home/node/.gitconfig
       - ./start-gateway.sh:/usr/local/bin/start-gateway.sh:ro
       - ./coder_acp_cmd.sh:/usr/local/bin/coder_acp_cmd.sh:ro
@@ -74,8 +75,8 @@ services:
       - ./secrets/openclaw-secrets.pass:/run/openclaw-secrets/openclaw-secrets.pass:ro
       - ./myextensions:/home/node/.openclaw/extensions
       - ./output/projects:/projects
+      - ./workspaces:/workspaces
       - apt_archives:/var/cache/apt/archives/
-      - npm_archives:/root/.npm
       - npm_archives:/home/node/.npm
     ports:
       - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"

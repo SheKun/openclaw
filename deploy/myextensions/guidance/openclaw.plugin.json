@@ -7,7 +7,12 @@
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
+    "required": ["rootDir"],
     "properties": {
+      "rootDir": {
+        "type": "string",
+        "minLength": 1
+      },
       "files": {
         "type": "array",
         "items": {
@@ -17,6 +22,10 @@
     }
   },
   "uiHints": {
+    "rootDir": {
+      "label": "Guidance Root Directory",
+      "help": "Base directory for resolving guidance file paths; absolute paths must also stay under this root"
+    },
     "files": {
       "label": "Guidance Files",
       "help": "List of markdown files injected into system prompt addition"

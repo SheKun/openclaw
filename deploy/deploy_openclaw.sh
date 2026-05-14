@@ -87,6 +87,7 @@ EXEC_NODE_CONFIG_DIR="~/.exec_node"
 
 # Coder Harness
 CODER_HARNESS_CONFIG_DIR="~/.coder-harness"
+CODER_USER_NAME="openclaw"
 
 # ------- 脚本执行变量 -------
 
@@ -244,6 +245,7 @@ ensure_remote_directories() {
     mkdir -p ${DEPLOY_DIR}/output/projects
     mkdir -p ${DEPLOY_DIR}/output/wiki
     mkdir -p ${DEPLOY_DIR}/myextensions
+    mkdir -p ${DEPLOY_DIR}/workspaces
     mkdir -p ${OPENCLAW_CONFIG_DIR}
     mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh
     mkdir -p ${OPENCLAW_CONFIG_DIR}/.ssh/sockets
@@ -268,7 +270,7 @@ ensure_gateway_token() {
   existing=$(
     ssh "${REMOTE_HOST}" "
         if [ -f ${DEPLOY_DIR}/.env ]; 
-        then grep '^OPENCLAW_GATEWAY_TOKEN=' ${DEPLOY_DIR}/.env | cut -d'=' -f2 | tr -d '\"'; 
+          then grep -m1 '^OPENCLAW_GATEWAY_TOKEN=' ${DEPLOY_DIR}/.env | cut -d'=' -f2- | tr -d \"\\\"'\"; 
         fi
     " || true)
 
@@ -287,8 +289,12 @@ sync_openclaw_runtime_files() {
 
   scp "${CONFIG_JSON_PATH}" "${REMOTE_HOST}:${OPENCLAW_CONFIG_DIR}/openclaw.json"
   scp "${SCRIPT_DIR}/exec-approvals.json" "${REMOTE_HOST}:${OPENCLAW_CONFIG_DIR}/exec-approvals.json"
-  scp "${SCRIPT_DIR}/openclaw_conf_exec_node.json" "${REMOTE_HOST}:${EXEC_NODE_CONFIG_DIR}/openclaw.json"
   scp "${SCRIPT_DIR}/exec-approvals.json" "${REMOTE_HOST}:${EXEC_NODE_CONFIG_DIR}/exec-approvals.json"
+  ssh "${REMOTE_HOST}" "
+       chmod 600 ${OPENCLAW_CONFIG_DIR}/openclaw.json \
+          ${OPENCLAW_CONFIG_DIR}/exec-approvals.json \
+          ${EXEC_NODE_CONFIG_DIR}/exec-approvals.json
+  "
 
   scp "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${REMOTE_HOST}:${REMOTE_KEEPASS_DB_PATH}"
   scp "${LOCAL_SECRET_BUNDLE_PASS_PATH}" "${REMOTE_HOST}:${REMOTE_KEEPASS_PASS_PATH}"
@@ -326,7 +332,7 @@ Host github.com
   HostName github.com
   User git
 Host coder-copilot
-  User root
+  User ${CODER_USER_NAME}
   ControlMaster auto
   ControlPath ~/.ssh/sockets/%r@%h:%p
   ControlPersist yes
@@ -409,27 +415,28 @@ write_remote_compose_env() {
 
   ssh "${REMOTE_HOST}" "cat <<EOF > ${DEPLOY_DIR}/.env
 # OpenClaw Gateway 配置
-OPENCLAW_IMAGE=${IMAGE_NAME}
-OPENCLAW_CONFIG_DIR=${OPENCLAW_CONFIG_DIR}
-OPENCLAW_AGENT_DIR=${DEFAULT_AGENT_DIR}
-PI_CODING_AGENT_DIR=${DEFAULT_AGENT_DIR}
-OPENCLAW_TZ=${OPENCLAW_TZ}
-OPENCLAW_LOG_LEVEL=${OPENCLAW_LOG_LEVEL}
+OPENCLAW_IMAGE='${IMAGE_NAME}'
+OPENCLAW_CONFIG_DIR='${OPENCLAW_CONFIG_DIR}'
+OPENCLAW_AGENT_DIR='${DEFAULT_AGENT_DIR}'
+PI_CODING_AGENT_DIR='${DEFAULT_AGENT_DIR}'
+OPENCLAW_TZ='${OPENCLAW_TZ}'
+OPENCLAW_LOG_LEVEL='${OPENCLAW_LOG_LEVEL}'
 BUNDLED_PLUGINS_TO_INSTALL='${BUNDLED_PLUGINS_TO_INSTALL[*]:-}'
-OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
-FEISHU_APP_ID_STEWARD=${FEISHU_APP_ID_STEWARD:-}
-FEISHU_APP_ID_CODER=${FEISHU_APP_ID_CODER:-}
-FEISHU_APP_ID_PLANNER=${FEISHU_APP_ID_PLANNER:-}
+OPENCLAW_GATEWAY_TOKEN='${GATEWAY_TOKEN}'
+FEISHU_APP_ID_STEWARD='${FEISHU_APP_ID_STEWARD:-}'
+FEISHU_APP_ID_CODER='${FEISHU_APP_ID_CODER:-}'
+FEISHU_APP_ID_PLANNER='${FEISHU_APP_ID_PLANNER:-}'
 
 # Coder Harness 配置
-CODER_HARNESS_CONFIG_DIR=${CODER_HARNESS_CONFIG_DIR}
-CODER_COPILOT_IMAGE=${CODER_COPILOT_IMAGE}
+CODER_HARNESS_CONFIG_DIR='${CODER_HARNESS_CONFIG_DIR}'
+CODER_COPILOT_IMAGE='${CODER_COPILOT_IMAGE}'
 OPENCLAW_PUB_KEY='${OPENCLAW_PUB_KEY}'
+CODER_USER_NAME='${CODER_USER_NAME}'
 
 # Exec Node 配置
-EXEC_NODE_CONFIG_DIR=${EXEC_NODE_CONFIG_DIR}
-OPENCLAW_GATEWAY_TLS_FINGERPRINT=${OPENCLAW_GATEWAY_TLS_FINGERPRINT}
-OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
+EXEC_NODE_CONFIG_DIR='${EXEC_NODE_CONFIG_DIR}'
+OPENCLAW_GATEWAY_TLS_FINGERPRINT='${OPENCLAW_GATEWAY_TLS_FINGERPRINT}'
+OPENCLAW_GATEWAY_TOKEN='${GATEWAY_TOKEN}'
 EOF
 "
 }

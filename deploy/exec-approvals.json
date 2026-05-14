@@ -1,3 +1,10 @@
 {
-  "defaults": {}
+  "version": 1,
+  "defaults": {
+    "security": "full",
+    "ask": "off",
+    "askFallback": "full",
+    "autoAllowSkills": true
+  },
+  "agents": {}
 }

@@ -4,6 +4,7 @@ import { BUNDLED_PLUGIN_ROOT_DIR } from "../../scripts/lib/bundled-plugin-paths.
 export const unitTestIncludePatterns = [
   "src/**/*.test.ts",
   "packages/**/*.test.ts",
+  "deploy/myextensions/**/*.test.ts",
   "test/**/*.test.ts",
 ];
 

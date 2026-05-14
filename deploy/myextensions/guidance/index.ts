@@ -6,6 +6,8 @@ import { CONFIG_DIR } from "openclaw/plugin-sdk/setup-tools";
 import { z } from "openclaw/plugin-sdk/zod";
 
 const configZodSchema = z.object({
+  /** Base directory used to resolve and validate guidance file paths. */
+  rootDir: z.string().trim().min(1),
   /** Explicit list of .md files to read and inject as system prompt additions. */
   files: z.array(z.string()).optional(),
 });
@@ -13,7 +15,7 @@ const configZodSchema = z.object({
 type GuidanceConfig = z.infer<typeof configZodSchema>;
 
 const configSchema = buildPluginConfigSchema(configZodSchema);
-const openclawWorkspaceRoot = path.resolve(CONFIG_DIR);
+const defaultGuidanceRootDir = path.resolve(CONFIG_DIR);
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof Error) {
@@ -22,15 +24,25 @@ function toErrorMessage(err: unknown): string {
   return String(err);
 }
 
-function toWorkspaceRelativePath(filePath: string): string {
+function toRootRelativePath(filePath: string, rootDir: string): string {
   const trimmed = filePath.trim();
   if (!trimmed) {
     throw new Error("guidance file path must not be empty");
   }
-  if (path.isAbsolute(trimmed)) {
-    return path.relative(openclawWorkspaceRoot, path.resolve(trimmed));
+
+  const resolvedPath = path.isAbsolute(trimmed)
+    ? path.resolve(trimmed)
+    : path.resolve(rootDir, trimmed);
+  const relativePath = path.relative(rootDir, resolvedPath);
+  if (
+    relativePath === ".." ||
+    relativePath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativePath)
+  ) {
+    throw new Error(`guidance file path must be inside configured rootDir: ${trimmed}`);
   }
-  return trimmed;
+
+  return relativePath;
 }
 
 export default definePluginEntry({
@@ -54,6 +66,7 @@ export default definePluginEntry({
 
       async assemble({ messages }) {
         const config = api.pluginConfig as GuidanceConfig;
+        const rootDir = path.resolve(config?.rootDir || defaultGuidanceRootDir);
         const guidanceFiles = config?.files ?? [];
         let systemPromptAddition = "";
 
@@ -67,9 +80,9 @@ export default definePluginEntry({
 
         for (const file of guidanceFiles) {
           try {
-            const relativePath = toWorkspaceRelativePath(file);
+            const relativePath = toRootRelativePath(file, rootDir);
             const opened = await openFileWithinRoot({
-              rootDir: openclawWorkspaceRoot,
+              rootDir,
               relativePath,
               rejectHardlinks: true,
             });

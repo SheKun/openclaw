@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../src/config/config.js";
-import type { ContextEngineFactory } from "../../src/context-engine/registry.js";
-import { buildPluginApi } from "../../src/plugins/api-builder.js";
-import type { PluginRuntime } from "../../src/plugins/runtime/types.js";
-import type { PluginLogger } from "../../src/plugins/types.js";
+import type { OpenClawConfig } from "../../../src/config/config.js";
+import type { ContextEngineFactory } from "../../../src/context-engine/registry.js";
+import { buildPluginApi } from "../../../src/plugins/api-builder.js";
+import type { PluginRuntime } from "../../../src/plugins/runtime/types.js";
+import type { PluginLogger } from "../../../src/plugins/types.js";
 import guidancePlugin from "./index.js";
 
 const { mockOpenFileWithinRoot } = vi.hoisted(() => ({
@@ -51,7 +51,7 @@ describe("guidance context engine plugin", () => {
       source: "test",
       registrationMode: "full",
       config: mockConfig,
-      pluginConfig: { files: ["test.md"] },
+      pluginConfig: { rootDir: "/home/node/.openclaw", files: ["test.md"] },
       runtime: mockRuntime,
       logger: createMockLogger(),
       resolvePath: (p) => p,
@@ -91,7 +91,7 @@ describe("guidance context engine plugin", () => {
       source: "test",
       registrationMode: "full",
       config: mockConfig,
-      pluginConfig: { files: mockFiles },
+      pluginConfig: { rootDir: "/home/node/.openclaw", files: mockFiles },
       runtime: mockRuntime,
       logger: createMockLogger(),
       resolvePath: (p: string) => p,
@@ -116,7 +116,7 @@ describe("guidance context engine plugin", () => {
     expect(result.systemPromptAddition).toContain("\n\n");
   });
 
-  it("reads relative paths under OpenClaw workspace root", async () => {
+  it("resolves relative paths under configured rootDir", async () => {
     mockOpenFileWithinRoot.mockReset();
     const mockFiles = ["workspace-shared/rules.md"];
     mockOpenFileWithinRoot.mockImplementation(async ({ relativePath }) => {
@@ -136,7 +136,7 @@ describe("guidance context engine plugin", () => {
       source: "test",
       registrationMode: "full",
       config: mockConfig,
-      pluginConfig: { files: mockFiles },
+      pluginConfig: { rootDir: "/custom/root", files: mockFiles },
       runtime: mockRuntime,
       logger: createMockLogger(),
       resolvePath: (p: string) => `/absolute/${p}`,
@@ -158,15 +158,15 @@ describe("guidance context engine plugin", () => {
 
     expect(result.systemPromptAddition).toBe("Resolved content");
     expect(mockOpenFileWithinRoot).toHaveBeenCalledWith({
-      rootDir: "/home/node/.openclaw",
+      rootDir: "/custom/root",
       relativePath: "workspace-shared/rules.md",
       rejectHardlinks: true,
     });
   });
 
-  it("allows absolute paths under OpenClaw workspace root", async () => {
+  it("allows absolute paths under configured rootDir", async () => {
     mockOpenFileWithinRoot.mockReset();
-    const absolutePath = "/home/node/.openclaw/workspace-shared/AGENTS.md";
+    const absolutePath = "/custom/root/workspace-shared/AGENTS.md";
     mockOpenFileWithinRoot.mockImplementation(async ({ relativePath }) => {
       if (relativePath === "workspace-shared/AGENTS.md") {
         return createOpenedFileResult("Agent rules", absolutePath);
@@ -181,7 +181,7 @@ describe("guidance context engine plugin", () => {
       source: "test",
       registrationMode: "full",
       config: mockConfig,
-      pluginConfig: { files: [absolutePath] },
+      pluginConfig: { rootDir: "/custom/root", files: [absolutePath] },
       runtime: mockRuntime,
       logger: createMockLogger(),
       resolvePath: (p: string) => p,
@@ -203,15 +203,14 @@ describe("guidance context engine plugin", () => {
 
     expect(result.systemPromptAddition).toBe("Agent rules");
     expect(mockOpenFileWithinRoot).toHaveBeenCalledWith({
-      rootDir: "/home/node/.openclaw",
+      rootDir: "/custom/root",
       relativePath: "workspace-shared/AGENTS.md",
       rejectHardlinks: true,
     });
   });
 
-  it("rejects absolute paths outside OpenClaw workspace root", async () => {
+  it("rejects absolute paths outside configured rootDir", async () => {
     mockOpenFileWithinRoot.mockReset();
-    mockOpenFileWithinRoot.mockRejectedValueOnce(new Error("file is outside workspace root"));
 
     let registeredFactory: ContextEngineFactory;
     const logger = createMockLogger();
@@ -222,7 +221,7 @@ describe("guidance context engine plugin", () => {
       source: "test",
       registrationMode: "full",
       config: mockConfig,
-      pluginConfig: { files: [blockedPath] },
+      pluginConfig: { rootDir: "/custom/root", files: [blockedPath] },
       runtime: mockRuntime,
       logger,
       resolvePath: (p: string) => p,
@@ -243,8 +242,12 @@ describe("guidance context engine plugin", () => {
     });
 
     expect(result.systemPromptAddition).toBe("");
+    expect(mockOpenFileWithinRoot).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining("failed to read file /etc/passwd"),
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("must be inside configured rootDir"),
     );
   });
 });
