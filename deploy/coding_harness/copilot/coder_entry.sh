@@ -11,8 +11,7 @@ ssh-keygen -A
 
 # 3. 配置 SSH 公钥
 ./create_ssh_user.sh \
-    --server-user "${CODER_USER_NAME}" \
-    --home "/home/${CODER_USER_NAME}" \
+    --server-user root \
     --public-key "${OPENCLAW_PUB_KEY:-}"
 
 # 4. 启动 sshd（environment 文件由部署脚本预生成并通过卷挂载提供）

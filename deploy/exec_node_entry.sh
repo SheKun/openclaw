@@ -5,10 +5,14 @@ set -e
 
 TLS_FINGERPRINT="${OPENCLAW_GATEWAY_TLS_FINGERPRINT:-}"
 STOP_REQUESTED=0
+NODE_PID=""
 
 on_shutdown() {
   STOP_REQUESTED=1
   echo "[exec-node] 收到停止信号，准备退出 ..."
+  if [ -n "$NODE_PID" ]; then
+    kill -TERM "$NODE_PID" 2>/dev/null || true
+  fi
 }
 
 trap 'on_shutdown' INT TERM
@@ -46,20 +50,20 @@ req.end();
 
 run_node_once() {
     if [ -n "$TLS_FINGERPRINT" ]; then
-        if openclaw node run --host openclaw-gateway --port 18789 \
-            --tls --tls-fingerprint "$TLS_FINGERPRINT" --display-name "exec_node"; then
-            EXIT_CODE=0
-        else
-            EXIT_CODE=$?
-        fi
+        openclaw node run --host openclaw-gateway --port 18789 \
+            --tls --tls-fingerprint "$TLS_FINGERPRINT" --display-name "exec_node" &
     else
-        if openclaw node run --host openclaw-gateway --port 18789 \
-            --tls --display-name "exec_node"; then
-            EXIT_CODE=0
-        else
-            EXIT_CODE=$?
-        fi
+        openclaw node run --host openclaw-gateway --port 18789 \
+            --tls --display-name "exec_node" &
     fi
+
+    NODE_PID=$!
+    if wait "$NODE_PID"; then
+        EXIT_CODE=0
+    else
+        EXIT_CODE=$?
+    fi
+    NODE_PID=""
 
     echo "[exec-node] node 进程已退出 (退出码=$EXIT_CODE)。"
     return "$EXIT_CODE"

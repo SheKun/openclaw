@@ -318,16 +318,7 @@ function samePendingApprovalSnapshot(
   if (existing.publicKey !== incoming.publicKey) {
     return false;
   }
-  if (normalizeRole(existing.role) !== normalizeRole(incoming.role)) {
-    return false;
-  }
-  if (
-    !sameStringSet(resolveRequestedRoles(existing), resolveRequestedRoles(incoming)) ||
-    !sameStringSet(resolveRequestedScopes(existing), resolveRequestedScopes(incoming))
-  ) {
-    return false;
-  }
-  return true;
+  return sameStringSet(resolveRequestedScopes(existing), resolveRequestedScopes(incoming));
 }
 
 function refreshPendingDevicePairingRequest(
@@ -513,23 +504,23 @@ export async function requestDevicePairing(
       throw new Error("deviceId required");
     }
     const isRepair = Boolean(state.pairedByDeviceId[deviceId]);
-    const pendingForDevice = Object.values(state.pendingById)
-      .filter((pending) => pending.deviceId === deviceId)
+    const normalizedIncomingRole = normalizeRole(req.role);
+    const pendingForDeviceAndRole = Object.values(state.pendingById)
+      .filter(
+        (pending) =>
+          pending.deviceId === deviceId && normalizeRole(pending.role) === normalizedIncomingRole,
+      )
       .toSorted((left, right) => right.ts - left.ts);
     return await reconcilePendingPairingRequests({
       pendingById: state.pendingById,
-      existing: pendingForDevice,
+      existing: pendingForDeviceAndRole,
       incoming: req,
       canRefreshSingle: (existing, incoming) => samePendingApprovalSnapshot(existing, incoming),
       refreshSingle: (existing, incoming) =>
         refreshPendingDevicePairingRequest(existing, incoming, isRepair),
       buildReplacement: ({ existing, incoming }) => {
-        const latestPending = existing[0];
-        const mergedRoles = mergeRoles(
-          ...existing.flatMap((pending) => [pending.roles, pending.role]),
-          incoming.roles,
-          incoming.role,
-        );
+        // Defensive fallback: same-role pending entries exist but canRefreshSingle
+        // returned false (e.g. publicKey changed). Delete them and create fresh.
         const mergedScopes = mergeScopes(
           ...existing.map((pending) => pending.scopes),
           incoming.scopes,
@@ -539,11 +530,7 @@ export async function requestDevicePairing(
           isRepair,
           req: {
             ...incoming,
-            role: normalizeRole(incoming.role) ?? latestPending?.role,
-            roles: mergedRoles,
             scopes: mergedScopes,
-            // Preserve interactive visibility when superseding pending requests:
-            // if any previous pending request was interactive, keep this one interactive.
             silent: resolveSupersededPendingSilent({
               existing,
               incomingSilent: incoming.silent,

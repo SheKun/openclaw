@@ -228,7 +228,7 @@ describe("device pairing tokens", () => {
     expect(second.request.ts).toBe(originalTs);
   });
 
-  test("supersedes pending requests when requested roles/scopes change", async () => {
+  test("creates independent pending entries for different roles on same device", async () => {
     const baseDir = await makeDevicePairingDir();
     const first = await requestDevicePairing(
       {
@@ -249,20 +249,28 @@ describe("device pairing tokens", () => {
       baseDir,
     );
 
+    // Different role → independent pending entry, not a merge/replace.
     expect(second.created).toBe(true);
     expect(second.request.requestId).not.toBe(first.request.requestId);
     expect(second.request.role).toBe("operator");
-    expect(second.request.roles).toEqual(expect.arrayContaining(["node", "operator"]));
+    expect(second.request.roles).toEqual(expect.arrayContaining(["operator"]));
     expect(second.request.scopes).toEqual(
       expect.arrayContaining(["operator.read", "operator.write"]),
     );
 
+    // Both pending requests coexist.
     const list = await listDevicePairing(baseDir);
-    expect(list.pending).toHaveLength(1);
-    expect(list.pending[0]?.requestId).toBe(second.request.requestId);
+    expect(list.pending).toHaveLength(2);
 
+    // Approve the operator request — device gets operator role.
     await approveDevicePairing(
       second.request.requestId,
+      { callerScopes: ["operator.read", "operator.write"] },
+      baseDir,
+    );
+    // Approve the node request — device now also has node role (merged into paired).
+    await approveDevicePairing(
+      first.request.requestId,
       { callerScopes: ["operator.read", "operator.write"] },
       baseDir,
     );
@@ -446,7 +454,7 @@ describe("device pairing tokens", () => {
     ).resolves.toEqual({ ok: true });
   });
 
-  test("keeps superseded requests interactive when an existing pending request is interactive", async () => {
+  test("each role's pending entry tracks its own silent flag independently", async () => {
     const baseDir = await makeDevicePairingDir();
     const first = await requestDevicePairing(
       {
@@ -460,6 +468,8 @@ describe("device pairing tokens", () => {
     );
     expect(first.request.silent).toBe(false);
 
+    // Different role → independent pending entry. The operator request's
+    // silent flag is its own, not influenced by the node request's.
     const second = await requestDevicePairing(
       {
         deviceId: "device-1",
@@ -473,7 +483,7 @@ describe("device pairing tokens", () => {
 
     expect(second.created).toBe(true);
     expect(second.request.requestId).not.toBe(first.request.requestId);
-    expect(second.request.silent).toBe(false);
+    expect(second.request.silent).toBe(true);
   });
 
   test("rejects bootstrap token replay before pending scope escalation can be approved", async () => {
@@ -1361,5 +1371,139 @@ describe("device pairing tokens", () => {
     await expect(clearDevicePairing("device-1", baseDir)).resolves.toBe(true);
     await expect(getPairedDevice("device-1", baseDir)).resolves.toBeNull();
     await expect(clearDevicePairing("device-1", baseDir)).resolves.toBe(false);
+  });
+
+  test("separates pending requests by (deviceId, role) — dual sessions get independent entries", async () => {
+    const baseDir = await makeDevicePairingDir();
+    const deviceId = "android-device-1";
+    const publicKey = "public-key-android";
+
+    // Simulate the Android app's node session connecting first.
+    const nodeRequest = await requestDevicePairing(
+      {
+        deviceId,
+        publicKey,
+        role: "node",
+        roles: ["node"],
+        scopes: [],
+      },
+      baseDir,
+    );
+    expect(nodeRequest.created).toBe(true);
+    const nodeRequestId = nodeRequest.request.requestId;
+
+    // Simulate the operator session connecting next.
+    // Different role → independent pending entry, no merge or replace.
+    const operatorRequest = await requestDevicePairing(
+      {
+        deviceId,
+        publicKey,
+        role: "operator",
+        roles: ["operator"],
+        scopes: ["operator.read", "operator.write", "operator.talk.secrets"],
+      },
+      baseDir,
+    );
+    expect(operatorRequest.created).toBe(true);
+    const operatorRequestId = operatorRequest.request.requestId;
+    // Each role gets its own requestId.
+    expect(operatorRequestId).not.toBe(nodeRequestId);
+
+    // Both pending requests coexist independently.
+    const listAfterBoth = await listDevicePairing(baseDir);
+    expect(listAfterBoth.pending).toHaveLength(2);
+    expect(listAfterBoth.pending.map((p) => p.requestId)).toContain(nodeRequestId);
+    expect(listAfterBoth.pending.map((p) => p.requestId)).toContain(operatorRequestId);
+
+    // Node session retries → refreshes its own entry, requestId stays the same.
+    const nodeRetry = await requestDevicePairing(
+      {
+        deviceId,
+        publicKey,
+        role: "node",
+        roles: ["node"],
+        scopes: [],
+      },
+      baseDir,
+    );
+    expect(nodeRetry.created).toBe(false);
+    expect(nodeRetry.request.requestId).toBe(nodeRequestId);
+
+    // Operator session retries → refreshes its own entry, requestId stays the same.
+    const operatorRetry = await requestDevicePairing(
+      {
+        deviceId,
+        publicKey,
+        role: "operator",
+        roles: ["operator"],
+        scopes: ["operator.read", "operator.write", "operator.talk.secrets"],
+      },
+      baseDir,
+    );
+    expect(operatorRetry.created).toBe(false);
+    expect(operatorRetry.request.requestId).toBe(operatorRequestId);
+
+    // After multiple retries, both requestIds remain stable.
+    const finalList = await listDevicePairing(baseDir);
+    expect(finalList.pending).toHaveLength(2);
+    expect(finalList.pending.map((p) => p.requestId).toSorted()).toEqual(
+      [nodeRequestId, operatorRequestId].toSorted(),
+    );
+  });
+
+  test("replaces pending request when same-role session changes scopes", async () => {
+    const baseDir = await makeDevicePairingDir();
+    const deviceId = "device-scope-change";
+    const publicKey = "public-key-scope-change";
+
+    // First request: operator with read-only scope.
+    const first = await requestDevicePairing(
+      {
+        deviceId,
+        publicKey,
+        role: "operator",
+        roles: ["operator"],
+        scopes: ["operator.read"],
+      },
+      baseDir,
+    );
+    expect(first.created).toBe(true);
+    const firstRequestId = first.request.requestId;
+
+    // Same device + role, same scopes → refresh (requestId stable).
+    const retry = await requestDevicePairing(
+      {
+        deviceId,
+        publicKey,
+        role: "operator",
+        roles: ["operator"],
+        scopes: ["operator.read"],
+      },
+      baseDir,
+    );
+    expect(retry.created).toBe(false);
+    expect(retry.request.requestId).toBe(firstRequestId);
+
+    // Same device + role, but scopes changed (added operator.write).
+    // Scopes are security-relevant → must create a new pending request.
+    const upgraded = await requestDevicePairing(
+      {
+        deviceId,
+        publicKey,
+        role: "operator",
+        roles: ["operator"],
+        scopes: ["operator.read", "operator.write"],
+      },
+      baseDir,
+    );
+    expect(upgraded.created).toBe(true);
+    expect(upgraded.request.requestId).not.toBe(firstRequestId);
+    // The old pending should be replaced.
+    const list = await listDevicePairing(baseDir);
+    expect(list.pending).toHaveLength(1);
+    expect(list.pending[0].requestId).toBe(upgraded.request.requestId);
+    expect(list.pending[0].scopes).toEqual(
+      expect.arrayContaining(["operator.read", "operator.write"]),
+    );
   });
 });

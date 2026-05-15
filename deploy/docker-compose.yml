@@ -5,19 +5,17 @@ services:
   coder-copilot:
     container_name: coder-copilot
     image: ${CODER_COPILOT_IMAGE:-coder-copilot:latest}
-    userns_mode: "keep-id:uid=1000,gid=1000"
     user: "root"
     environment:
       OPENCLAW_PUB_KEY: ${OPENCLAW_PUB_KEY:-}
-      CODER_USER_NAME: ${CODER_USER_NAME:-openclaw}
     volumes:
-      - ${CODER_HARNESS_CONFIG_DIR}:/home/${CODER_USER_NAME}
+      - ${CODER_HARNESS_CONFIG_DIR}:/root
       - ./output/projects:/projects
       - ./coder_entry.sh:/entrypoint.sh:ro
       - ./create_ssh_user.sh:/create_ssh_user.sh:ro
     init: true
     restart: unless-stopped
-    entrypoint: ["/entrypoint.sh"]
+    command: ["/entrypoint.sh"]
     networks:
       - openclaw-internal
 
@@ -43,7 +41,7 @@ services:
     depends_on:
       openclaw-gateway:
         condition: service_started
-    command: ["sh", "/usr/local/bin/exec_node_entry.sh"]
+    command: ["/usr/local/bin/exec_node_entry.sh"]
     networks:
       openclaw-internal:
         ipv4_address: 172.30.0.10
@@ -86,7 +84,7 @@ services:
     depends_on:
       coder-copilot:
         condition: service_started
-    command: ["sh", "/usr/local/bin/start-gateway.sh"]
+    command: ["/usr/local/bin/start-gateway.sh"]
     healthcheck:
       test:
         [

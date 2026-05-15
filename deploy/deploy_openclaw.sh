@@ -15,7 +15,7 @@ COPILOT_HARNESS_DIR="${SCRIPT_DIR}/coding_harness/copilot"
 COPILOT_DEPLOY_SCRIPT="${COPILOT_HARNESS_DIR}/deploy_copilot.sh"
 
 # ------- 版本控制量设置（可按需调整） -------
-OPENCLAW_BUILD_SUFFIX="${OPENCLAW_BUILD_SUFFIX:-build202605091410}"
+OPENCLAW_BUILD_SUFFIX="${OPENCLAW_BUILD_SUFFIX:-build202605151637}"
 COPILOT_VERSION="${COPILOT_VERSION:-1.0.38}"
 DOCKER_BUILD_SECRET_ARGS=(
   --secret "id=openclaw_debian_sources,src=${DOCKER_APT_SOURCES_FILE}"
@@ -87,7 +87,6 @@ EXEC_NODE_CONFIG_DIR="~/.exec_node"
 
 # Coder Harness
 CODER_HARNESS_CONFIG_DIR="~/.coder-harness"
-CODER_USER_NAME="openclaw"
 
 # ------- 脚本执行变量 -------
 
@@ -332,7 +331,7 @@ Host github.com
   HostName github.com
   User git
 Host coder-copilot
-  User ${CODER_USER_NAME}
+  User root
   ControlMaster auto
   ControlPath ~/.ssh/sockets/%r@%h:%p
   ControlPersist yes
@@ -431,7 +430,6 @@ FEISHU_APP_ID_PLANNER='${FEISHU_APP_ID_PLANNER:-}'
 CODER_HARNESS_CONFIG_DIR='${CODER_HARNESS_CONFIG_DIR}'
 CODER_COPILOT_IMAGE='${CODER_COPILOT_IMAGE}'
 OPENCLAW_PUB_KEY='${OPENCLAW_PUB_KEY}'
-CODER_USER_NAME='${CODER_USER_NAME}'
 
 # Exec Node 配置
 EXEC_NODE_CONFIG_DIR='${EXEC_NODE_CONFIG_DIR}'

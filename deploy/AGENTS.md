@@ -75,9 +75,10 @@
 **实现原理**：
 
 - 从 `plugins.entries.guidance.config.files` 配置的文件列表中读取 Markdown 内容。
-- 通过 `registerContextEngine` 将内容注入每次对话的 system prompt addition。
-- 当前注入的文件：目录`/workspaces/`下的`AGENTS.md`、`TOOLS.md`、`SOUL.md`、`USER.md`。
-- 通过 `plugins.slots.contextEngine: "public-guidance"` 激活为默认上下文引擎。
+- 通过 `registerContextEngine("guidance")` 将内容注入每次对话的 system prompt addition。
+- 文件路径基于 `plugins.entries.guidance.config.rootDir` 解析（默认为 OpenClaw 配置目录），支持相对路径与绝对路径，但必须位于 `rootDir` 下（通过 `openFileWithinRoot` 安全校验）。
+- 当前配置：`rootDir="/workspaces/shared"`，注入文件：`AGENTS.md`、`TOOLS.md`、`SOUL.md`、`USER.md`。
+- 通过 `plugins.slots.contextEngine: "guidance"` 激活为默认上下文引擎。
 
 #### browser 导航超时可配置化
 
@@ -116,21 +117,22 @@ deploy/
 ├── .env                        # 本地环境变量，包含所有密钥（不入库，见下方变量说明）
 ├── docker-compose.yml          # 定制化 Compose 编排文件
 ├── openclaw_conf.json          # OpenClaw 主配置（agents、channels、models、plugins）
-├── openclaw_conf_exec_node.json # Exec Node 配置
 ├── exec-approvals.json         # Exec Node 与 Gateway 共享执行审批配置
 ├── start-gateway.sh            # Gateway 容器启动包装脚本
 ├── exec_node_entry.sh          # Exec Node 容器入口脚本
 ├── keepassxc-vault.sh          # Keepass secret provider 工具脚本
-├── deploy_openclaw.sh          # 本地构建 + SSH 远程部署脚本
-├── create_ssh_user.sh          # SSH 用户初始化工具（被 coder-copilot 容器调用）
+├── deploy_openclaw.sh          # 本地构建 + SSH 远程部署主脚本
+├── create_ssh_user.sh          # SSH 用户初始化工具（创建 cdp_tunnel、coder-copilot 等系统用户）
+├── launch_chrome.sh            # 宿主机 Chrome CDP 启动脚本（部署后手动运行）
 ├── buildkit/                   # BuildKit secret 配置（镜像源）
 │   ├── debian.sources
 │   └── npmrc
 ├── coding_harness/
 │   └── copilot/                # GitHub Copilot ACP Harness 镜像定义
 │       ├── Dockerfile
+│       ├── deploy_copilot.sh   # Copilot Harness 独立部署脚本（被主部署脚本调用）
 │       ├── coder_entry.sh      # Harness 容器入口脚本
-│       ├── coder_acp_cmd.sh    # 配套 ACP 远程调用命令脚本（供 ACP client 使用，例如 openclaw gateway）
+│       ├── coder_acp_cmd.sh    # 配套 ACP 远程调用命令脚本（供 ACP client 使用）
 │       └── sshd_config         # 安全加固的 SSH 服务配置
 └── myextensions/
     └── guidance/               # 自定义全局规则注入插件
@@ -148,6 +150,16 @@ deploy/
 - 必备软件：
   1. Chrome：提供浏览器 CDP 服务。
   2. Podman 与 podman-compose：运行容器。
+
+### openclaw CLI
+
+为了方便在宿主机上，运行gateway容器中的OpenClaw CLI，在.bashrc中加入了如下配置：
+
+```
+openclaw() {
+  podman exec -it openclaw-gateway openclaw "$@"
+}
+```
 
 ---
 
@@ -215,9 +227,9 @@ deploy/
 Dependency arrows (依赖服务 -> 被依赖服务):
 
 openclaw-gateway  ----------SSH(ACPx/coder_acp_cmd.sh)----------> coder-copilot
-openclaw-exec-node --------HTTPS/WSS----------------------------> openclaw-gateway
 openclaw-gateway  ----------HTTP(baseUrl /v1)-------------------> litellm-gateway
 openclaw-gateway  ----------SSH tunnel(cdp_tunnel, 9222)-------> Host Chrome CDP (172.17.0.1:9222)
+openclaw-exec-node --------HTTPS/WSS----------------------------> openclaw-gateway
 openclaw-gateway  ----------HTTPS/WebSocket outbound-----------> GitHub / Feishu / Others
 ```
 
@@ -257,27 +269,14 @@ openclaw-gateway  ----------HTTPS/WebSocket outbound-----------> GitHub / Feishu
 
 #### `openclaw-gateway` & `coder-copilot`
 
-- 项目工作目录 `${DEPLOY_DIR}/output/projects` -> `/projects`：gateway将/projects设置为ACP agent coder的工作目录(CWD)，因此/projects需要在两个容器都存在
-
-note:
-
-```
-- `coder-copilot` 的 SSH/Copilot 配置来自 `${CODER_HARNESS_CONFIG_DIR}`（挂载到 `/root/.ssh`、`/root/.copilot`），与 gateway 的 `${OPENCLAW_CONFIG_DIR}` 分离，避免凭据与运行态互相污染。
-```
+- 项目工作目录 `${DEPLOY_DIR}/output/projects` -> `/projects`：gateway 将 `/projects` 设置为 ACP agent coder 的工作目录(CWD)，因此 `/projects` 需要在两个容器中都存在。
 
 #### `openclaw-gateway` & `openclaw-exec-node`
 
 - `${OPENCLAW_CONFIG_DIR}/.ssh` -> `/home/node/.ssh`：共享同一套 SSH 身份与 host 配置，保证 gateway/exec-node 访问策略一致，例如，远端git仓库
-- `${DEPLOY_DIR}/workspaces` -> `/workspaces`: agent工作目录的根目录，gateway配置需要引用，同时agent也需要通过`exec`工具访问
-- 容器卷 `apt_archives` -> `/var/cache/apt/archives/`：缓存 apt 包下载，加速 exec-node 依赖安装，gateway和agent（通过`exec`）都可能触发 `apt install`
-- 容器卷 `npm_archives` -> `/home/node/.npm`：缓存 npm 包元数据与离线存储，加速依赖安装和离线构建，gateway和agent（通过`exec`）都可能触发 `npm install`
-
-note：
-
-```
-- `openclaw-exec-node` 的节点本地状态目录单独挂载 `${EXEC_NODE_CONFIG_DIR}:/home/node/.exec_node`，不会与 gateway 状态目录混用。
-- `${OPENCLAW_CONFIG_DIR}/output` 仅挂载到 `openclaw-exec-node`，因为agent需要调用`exec`工具才能读写此目录
-```
+- `${DEPLOY_DIR}/workspaces` -> `/workspaces`：agent 工作目录的根目录，gateway 配置需要引用，同时 agent 也需要通过 `exec` 工具访问
+- 容器卷 `apt_archives` -> `/var/cache/apt/archives/`：缓存 apt 包下载，加速 exec-node 依赖安装，gateway 和 agent（通过 `exec`）都可能触发 `apt install`
+- 容器卷 `npm_archives` -> `/home/node/.npm`：缓存 npm 包元数据与离线存储，加速依赖安装和离线构建，gateway 和 agent（通过 `exec`）都可能触发 `npm install`
 
 ---
 
