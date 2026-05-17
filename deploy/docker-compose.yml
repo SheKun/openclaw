@@ -8,14 +8,19 @@ services:
     user: "root"
     environment:
       OPENCLAW_PUB_KEY: ${OPENCLAW_PUB_KEY:-}
+      KEEPASSXC_DB: "/root/.safe-exec/openclaw-secrets.kdbx"
+      KEEPASSXC_KEY_FILE: "/root/.safe-exec/openclaw-secrets.pass"
+      TOKEN_SLOT_PATH: "copilot/gh_token"
     volumes:
-      - ${CODER_HARNESS_CONFIG_DIR}:/root
+      - ${CODER_HARNESS_CONFIG_DIR}:/root/.copilot
+      - ./secrets/openclaw-secrets.kdbx:/root/.safe-exec/openclaw-secrets.kdbx:ro
+      - ./secrets/openclaw-secrets.pass:/root/.safe-exec/openclaw-secrets.pass:ro
       - ./output/projects:/projects
       - ./coder_entry.sh:/entrypoint.sh:ro
       - ./create_ssh_user.sh:/create_ssh_user.sh:ro
     init: true
     restart: unless-stopped
-    command: ["/entrypoint.sh"]
+    entrypoint: ["/entrypoint.sh"]
     networks:
       - openclaw-internal
 
@@ -84,19 +89,7 @@ services:
     depends_on:
       coder-copilot:
         condition: service_started
-    command: ["/usr/local/bin/start-gateway.sh"]
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "const https=require('node:https');const req=https.request({hostname:'127.0.0.1',port:18789,path:'/healthz',method:'GET',rejectUnauthorized:false},(res)=>{res.resume();process.exit(res.statusCode&&res.statusCode<500?0:1)});req.once('error',()=>process.exit(1));req.end();",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+    entrypoint: ["/usr/local/bin/start-gateway.sh"]
     networks:
       - local-llm-service
       - openclaw-internal

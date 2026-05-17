@@ -8,6 +8,9 @@ DOCKER_BUILDKIT_CONFIG_DIR="${DEPLOY_SCRIPT_DIR}/buildkit"
 DOCKER_APT_SOURCES_FILE="${DOCKER_BUILDKIT_CONFIG_DIR}/debian.sources"
 DOCKER_NPMRC_FILE="${DOCKER_BUILDKIT_CONFIG_DIR}/npmrc"
 
+SAFE_EXEC_IMAGE="safe-exec:latest"
+SAFE_EXEC_DIR="${DEPLOY_SCRIPT_DIR}/safe-exec"
+
 REMOTE_HOST=""
 DEPLOY_DIR=""
 CODER_HARNESS_CONFIG_DIR=""
@@ -68,29 +71,30 @@ if [ -z "${COPILOT_VERSION}" ]; then
 	fi
 fi
 
-COPILOT_HARNESS_BASE_IMAGE="node:22-bookworm-slim"
-
 echo "=> 使用 Copilot CLI 版本: ${COPILOT_VERSION}"
 echo "=> 将构建并部署 Harness 镜像: ${CODER_COPILOT_IMAGE}"
 
-echo "=> 检查是否存在镜像 ${CODER_COPILOT_IMAGE} ..."
-if docker image inspect "${CODER_COPILOT_IMAGE}" >/dev/null 2>&1; then
-	echo "镜像 ${CODER_COPILOT_IMAGE} 已存在，跳过本地构建。"
-else
-	echo "镜像 ${CODER_COPILOT_IMAGE} 不存在，开始构建 Copilot Harness 镜像 ..."
-	DOCKER_BUILDKIT=1 docker build --provenance=false \
-		"${DOCKER_BUILD_SECRET_ARGS[@]}" \
-		--build-arg "BASE_IMAGE=${COPILOT_HARNESS_BASE_IMAGE}" \
-		--build-arg "COPILOT_VERSION=${COPILOT_VERSION}" \
-		-t "${CODER_COPILOT_IMAGE}" \
-		-f "${SCRIPT_DIR}/Dockerfile" "${SCRIPT_DIR}"
-fi
+echo "=> 构建 safe-exec 基础镜像${SAFE_EXEC_IMAGE} ..."
+DOCKER_BUILDKIT=1 docker build --provenance=false \
+	"${DOCKER_BUILD_SECRET_ARGS[@]}" \
+	-t "${SAFE_EXEC_IMAGE}" \
+	-f "${SAFE_EXEC_DIR}/Dockerfile" "${SAFE_EXEC_DIR}"
+
+echo "=> 构建镜像 ${CODER_COPILOT_IMAGE} ..."
+DOCKER_BUILDKIT=1 docker build --provenance=false \
+	"${DOCKER_BUILD_SECRET_ARGS[@]}" \
+	--build-arg "COPILOT_VERSION=${COPILOT_VERSION}" \
+	-t "${CODER_COPILOT_IMAGE}" \
+	-f "${SCRIPT_DIR}/Dockerfile" "${SCRIPT_DIR}"
 
 echo "=> 将 Copilot Harness 镜像导入 ${REMOTE_HOST} (podman save & load) ..."
-if ssh "${REMOTE_HOST}" "podman image inspect ${CODER_COPILOT_IMAGE} >/dev/null 2>&1"; then
-	echo "远程主机 ${REMOTE_HOST} 已存在镜像 ${CODER_COPILOT_IMAGE}，跳过导入步骤。"
+LOCAL_HASH=$(docker inspect --format='{{.Id}}' "${CODER_COPILOT_IMAGE}" 2>/dev/null || true)
+REMOTE_HASH=$(ssh "${REMOTE_HOST}" "podman image inspect --format='{{.Id}}' ${CODER_COPILOT_IMAGE} 2>/dev/null || true")
+
+if [ -n "${REMOTE_HASH}" ] && [ "${LOCAL_HASH}" = "${REMOTE_HASH}" ]; then
+	echo "远程主机 ${REMOTE_HOST} 已存在镜像 ${CODER_COPILOT_IMAGE} 且 hash 一致，跳过导入步骤。"
 else
-	echo "远程主机缺少该镜像，将其导出并通过 ssh 的标准输入直接载入远程节点 ..."
+	echo "远程主机缺少该镜像或 hash 不一致，将其导出并通过 ssh 的标准输入直接载入远程节点 ..."
 	docker save "${CODER_COPILOT_IMAGE}" | ssh "${REMOTE_HOST}" "podman load"
 fi
 
@@ -102,14 +106,6 @@ ssh "${REMOTE_HOST}" "chmod 700 ${DEPLOY_DIR}/coder_entry.sh ${DEPLOY_DIR}/coder
 echo "=> 创建 coder harness 配置目录 ${CODER_HARNESS_CONFIG_DIR} ..."
 ssh "${REMOTE_HOST}" "
 	mkdir -p ${CODER_HARNESS_CONFIG_DIR}
-	mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh
-	mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.copilot
 "
-
-echo "=> 生成 SSH environment 文件 (Copilot BYOK 变量，通过卷挂载注入容器) ..."
-ssh "${REMOTE_HOST}" "mkdir -p ${CODER_HARNESS_CONFIG_DIR}/.ssh"
-ssh "${REMOTE_HOST}" "cat > ${CODER_HARNESS_CONFIG_DIR}/.ssh/environment && chmod 600 ${CODER_HARNESS_CONFIG_DIR}/.ssh/environment" <<EOF
-GH_TOKEN=${COPILOT_GITHUB_TOKEN:-}
-EOF
 
 echo "=> Copilot Harness 部署完成。"

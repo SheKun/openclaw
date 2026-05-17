@@ -68,16 +68,4 @@ for workspace_dir in /home/node/.openclaw/workspace-*; do
 done
 
 echo "[start-gateway] 启动 openclaw gateway ..."
-node openclaw.mjs gateway --allow-unconfigured & GATEWAY_PID=$!
-
-# 等待 gateway 监听端口就绪（最多 30 秒）
-echo "[start-gateway] 等待 gateway 端口 18789 就绪 ..."
-for i in $(seq 1 30); do
-  if nc -z 127.0.0.1 18789 2>/dev/null; then
-    echo "[start-gateway] gateway 已就绪（${i}s）"
-    break
-  fi
-  sleep 1
-done
-
-wait $GATEWAY_PID
+exec "$@"

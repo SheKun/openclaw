@@ -189,6 +189,7 @@ build_keepass_secret_bundle() {
   upsert_keepass_secret "litellm/apiKey" "${LITELLM_API_KEY}"
   upsert_keepass_secret "perplexity/apiKey" "${PERPLEXITY_API_KEY:-}"
   upsert_keepass_secret "agent/secretDbPassword" "${AGENT_SECRET_DB_PASSWORD}"
+  upsert_keepass_secret "copilot/gh_token" "${COPILOT_GITHUB_TOKEN:-}"
 
   printf '%s' "${AGENT_SECRET_DB_PASSWORD}" > "${LOCAL_SECRET_BUNDLE_PASS_PATH}"
   chmod 600 "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${LOCAL_SECRET_BUNDLE_PASS_PATH}"
@@ -331,7 +332,7 @@ Host github.com
   HostName github.com
   User git
 Host coder-copilot
-  User root
+  User cli_usr
   ControlMaster auto
   ControlPath ~/.ssh/sockets/%r@%h:%p
   ControlPersist yes
@@ -550,11 +551,11 @@ main() {
   build_keepass_secret_bundle
   resolve_openclaw_identity
 
-  step 3 "部署 OpenClaw 版本（镜像）及相关文件到服务器"
-  deploy_openclaw_to_server
-
-  step 4 "部署 Coder Harness"
+  step 3 "部署 Coder Harness"
   deploy_coder_harness
+
+  step 4 "部署 OpenClaw 版本（镜像）及相关文件到服务器"
+  deploy_openclaw_to_server
 
   step 5 "拷贝服务编排相关文件"
   copy_orchestration_files
