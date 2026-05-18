@@ -434,6 +434,28 @@ function resolveTargetAcpAgentId(params: {
   };
 }
 
+function resolveAcpAgentConfigDefaults(params: { cfg: OpenClawConfig; ownerAgentId?: string }): {
+  cwd?: string;
+  mode?: string;
+  backend?: string;
+} {
+  const ownerAgentId = normalizeOptionalLowercaseString(params.ownerAgentId);
+  if (!ownerAgentId) {
+    return {};
+  }
+  const agent = params.cfg.agents?.list?.find(
+    (entry) => normalizeOptionalLowercaseString(entry.id) === ownerAgentId,
+  );
+  if (!agent || agent.runtime?.type !== "acp") {
+    return {};
+  }
+  return {
+    cwd: normalizeOptionalString(agent.runtime.acp?.cwd),
+    mode: normalizeOptionalString(agent.runtime.acp?.mode),
+    backend: normalizeOptionalString(agent.runtime.acp?.backend),
+  };
+}
+
 function isExplicitlyAllowedAcpAgent(cfg: OpenClawConfig, agentId: string): boolean {
   return (cfg.acp?.allowedAgents ?? []).some((entry) => {
     const normalized = normalizeOptionalAgentId(entry);
@@ -915,6 +937,7 @@ async function initializeAcpSpawnRuntime(params: {
   cfg: OpenClawConfig;
   sessionKey: string;
   targetAgentId: string;
+  acpAgentId?: string;
   runtimeMode: AcpRuntimeSessionMode;
   resumeSessionId?: string;
   model?: string;
@@ -941,7 +964,7 @@ async function initializeAcpSpawnRuntime(params: {
   const initialized = await getAcpSessionManager().initializeSession({
     cfg: params.cfg,
     sessionKey: params.sessionKey,
-    agent: params.targetAgentId,
+    agent: params.acpAgentId,
     mode: params.runtimeMode,
     resumeSessionId: params.resumeSessionId,
     runtimeOptions:
@@ -1177,8 +1200,9 @@ export async function spawnAcpDirect(
     });
   }
 
+  const targetAgentId = params.agentId;
   const targetAgentResult = resolveTargetAcpAgentId({
-    requestedAgentId: params.agentId,
+    requestedAgentId: targetAgentId,
     cfg,
   });
   if (!targetAgentResult.ok) {
@@ -1191,8 +1215,8 @@ export async function spawnAcpDirect(
       error: targetAgentResult.error,
     });
   }
-  const targetAgentId = targetAgentResult.agentId;
-  const agentPolicyError = resolveAcpAgentPolicyError(cfg, targetAgentId);
+  const acpAgentId = targetAgentResult.agentId;
+  const agentPolicyError = resolveAcpAgentPolicyError(cfg, acpAgentId);
   if (agentPolicyError) {
     return createAcpSpawnFailure({
       status: "forbidden",
@@ -1246,17 +1270,19 @@ export async function spawnAcpDirect(
 
   const sessionKey = `agent:${targetAgentId}:acp:${crypto.randomUUID()}`;
   const runtimeMode = resolveAcpSessionMode(spawnMode);
+  const acpDefaults = resolveAcpAgentConfigDefaults({ cfg, ownerAgentId: targetAgentId });
+  const effectiveCwd = params.cwd ?? acpDefaults.cwd;
   const resolvedCwd = resolveSpawnedWorkspaceInheritance({
     config: cfg,
     targetAgentId,
     requesterSessionKey: ctx.agentSessionKey,
-    explicitWorkspaceDir: params.cwd,
+    explicitWorkspaceDir: effectiveCwd,
   });
   let runtimeCwd: string | undefined;
   try {
     runtimeCwd = await resolveRuntimeCwdForAcpSpawn({
       resolvedCwd,
-      explicitCwd: params.cwd,
+      explicitCwd: effectiveCwd,
     });
   } catch (error) {
     return createAcpSpawnFailure({
@@ -1305,6 +1331,7 @@ export async function spawnAcpDirect(
       cfg,
       sessionKey,
       targetAgentId,
+      acpAgentId,
       runtimeMode,
       resumeSessionId: params.resumeSessionId,
       model: params.model,

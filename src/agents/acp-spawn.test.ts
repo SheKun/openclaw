@@ -946,7 +946,7 @@ describe("spawnAcpDirect", () => {
     expect(hoisted.initializeSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         agent: "codex",
-        sessionKey: expect.stringMatching(/^agent:codex:acp:/),
+        sessionKey: expect.stringMatching(/^agent:reviewer:acp:/),
       }),
     );
   });
