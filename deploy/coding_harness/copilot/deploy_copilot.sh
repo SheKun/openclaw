@@ -88,13 +88,13 @@ DOCKER_BUILDKIT=1 docker build --provenance=false \
 	-f "${SCRIPT_DIR}/Dockerfile" "${SCRIPT_DIR}"
 
 echo "=> 将 Copilot Harness 镜像导入 ${REMOTE_HOST} (podman save & load) ..."
-LOCAL_HASH=$(docker inspect --format='{{.Id}}' "${CODER_COPILOT_IMAGE}" 2>/dev/null || true)
-REMOTE_HASH=$(ssh "${REMOTE_HOST}" "podman image inspect --format='{{.Id}}' ${CODER_COPILOT_IMAGE} 2>/dev/null || true")
+LOCAL_HASH=$(docker inspect --format='{{.Id}}' "${CODER_COPILOT_IMAGE}" 2>/dev/null | sed 's/^[^:]\+://' || true)
+REMOTE_HASH=$(ssh "${REMOTE_HOST}" "podman image inspect --format='{{.Id}}' ${CODER_COPILOT_IMAGE} 2>/dev/null | sed 's/^[^:]\+://' || true")
 
 if [ -n "${REMOTE_HASH}" ] && [ "${LOCAL_HASH}" = "${REMOTE_HASH}" ]; then
 	echo "远程主机 ${REMOTE_HOST} 已存在镜像 ${CODER_COPILOT_IMAGE} 且 hash 一致，跳过导入步骤。"
 else
-	echo "远程主机缺少该镜像或 hash 不一致，将其导出并通过 ssh 的标准输入直接载入远程节点 ..."
+	echo "远程主机缺少该镜像或 hash 不一致(LOCAL: '${LOCAL_HASH}'，REMOTE: '${REMOTE_HASH})'，将其导出并通过 ssh 的标准输入直接载入远程节点 ..."
 	docker save "${CODER_COPILOT_IMAGE}" | ssh "${REMOTE_HOST}" "podman load"
 fi
 

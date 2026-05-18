@@ -14,13 +14,12 @@ echo "🚀 Starting SSH server for Coding Harness Gateway..."
 if [ -f "${KEEPASSXC_DB}" ] && [ -f "${KEEPASSXC_KEY_FILE}" ]; then
     KEEPASSXC_KEY_VALUE=$(cat "${KEEPASSXC_KEY_FILE}")
     cat << EOF > /root/.safe-exec/env
-    KEEPASSXC_DB='${KEEPASSXC_DB}'
-    KEEPASSXC_KEY='${KEEPASSXC_KEY_VALUE}'
-    TOKEN_SLOT_PATH='${TOKEN_SLOT_PATH}'
-    TOKEN_ENV_VARS='GH_TOKEN'
-    ALLOWED_CLIS='/usr/local/bin/copilot'
-    EOF
-    
+KEEPASSXC_DB='${KEEPASSXC_DB}'
+KEEPASSXC_KEY='${KEEPASSXC_KEY_VALUE}'
+TOKEN_SLOT_PATH='${TOKEN_SLOT_PATH}'
+TOKEN_ENV_VARS='GH_TOKEN'
+ALLOWED_CLIS='/usr/local/bin/copilot'
+EOF
     chmod 700 /root/.safe-exec/env
     echo "✅ safe-exec env file configured."
 else

@@ -77,7 +77,7 @@
 - 从 `plugins.entries.guidance.config.files` 配置的文件列表中读取 Markdown 内容。
 - 通过 `registerContextEngine("guidance")` 将内容注入每次对话的 system prompt addition。
 - 文件路径基于 `plugins.entries.guidance.config.rootDir` 解析（默认为 OpenClaw 配置目录），支持相对路径与绝对路径，但必须位于 `rootDir` 下（通过 `openFileWithinRoot` 安全校验）。
-- 当前配置：`rootDir="/workspaces/shared"`，注入文件：`AGENTS.md`、`TOOLS.md`、`SOUL.md`、`USER.md`。
+- 当前配置：`rootDir="${AGENT_WORKSPACE_ROOT}/shared"`，注入文件：`AGENTS.md`、`TOOLS.md`、`SOUL.md`、`USER.md`。
 - 通过 `plugins.slots.contextEngine: "guidance"` 激活为默认上下文引擎。
 
 #### browser 导航超时可配置化

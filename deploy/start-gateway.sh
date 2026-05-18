@@ -58,7 +58,7 @@ for plugin in $BUNDLED_PLUGINS_TO_INSTALL; do
 done
 
 echo "同步所有agent的工作空间..."
-for workspace_dir in /home/node/.openclaw/workspace-*; do
+for workspace_dir in ${AGENT_WORKSPACE_ROOT}/*; do
   if [ -d "$workspace_dir" ]; then
     if [ -d "$workspace_dir/.git" ]; then
       echo "[start-gateway]   -> 更新工作空间: $(basename "$workspace_dir") ..."

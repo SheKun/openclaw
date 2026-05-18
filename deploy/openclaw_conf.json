@@ -114,7 +114,7 @@
       "guidance": {
         "enabled": true,
         "config": {
-          "rootDir": "/workspaces/shared",
+          "rootDir": "${AGENT_WORKSPACE_ROOT}/shared",
           "files": ["AGENTS.md", "TOOLS.md", "SOUL.md", "USER.md"]
         }
       },
@@ -194,18 +194,9 @@
     "maxPerDay": 3
   },
   "skills": {
-    "allowBundled": [
-      "healthcheck",
-      "node-connect",
-      "session-logs",
-      "clawhub",
-      "skill-creator",
-      "taskflow",
-      "weather",
-      "obsidian"
-    ],
+    "allowBundled": ["session-logs", "clawhub", "skill-creator", "taskflow", "weather", "obsidian"],
     "load": {
-      "extraDirs": ["/workspaces/shared/skills"],
+      "extraDirs": ["${AGENT_WORKSPACE_ROOT}/shared/skills"],
       "watch": true,
       "watchDebounceMs": 250
     },
@@ -355,7 +346,7 @@
         "id": "steward",
         "default": true,
         "name": "Adam",
-        "workspace": "/workspaces/steward",
+        "workspace": "${AGENT_WORKSPACE_ROOT}/steward",
         "agentDir": "~/.openclaw/agents/steward/agent",
         "model": "litellm/qwen3.6-plus",
         "subagents": {
@@ -378,8 +369,8 @@
           "skill-vetter",
           "prose",
           "taskflow",
-          "healthcheck",
-          "node-connect",
+          "gateway-healthcheck",
+          "gateway-node-connect",
           "session-logs",
           "weather",
           "obsidian",
@@ -389,7 +380,7 @@
       {
         "id": "coder",
         "name": "Ape",
-        "workspace": "/workspaces/coder",
+        "workspace": "${AGENT_WORKSPACE_ROOT}/coder",
         "runtime": {
           "type": "acp",
           "acp": {
@@ -403,7 +394,7 @@
       {
         "id": "planner",
         "name": "Fox",
-        "workspace": "/workspaces/planner",
+        "workspace": "${AGENT_WORKSPACE_ROOT}/planner",
         "agentDir": "~/.openclaw/agents/planner/agent",
         "model": "litellm/qwen3.6-flash",
         "subagents": {
@@ -418,7 +409,7 @@
       {
         "id": "crawler",
         "name": "Spider",
-        "workspace": "/workspaces/crawler",
+        "workspace": "${AGENT_WORKSPACE_ROOT}/crawler",
         "agentDir": "~/.openclaw/agents/crawler/agent",
         "model": "litellm/qwen3.6-flash",
         "subagents": {

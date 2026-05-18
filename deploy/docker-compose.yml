@@ -21,6 +21,7 @@ services:
     init: true
     restart: unless-stopped
     entrypoint: ["/entrypoint.sh"]
+    command: ["/usr/sbin/sshd", "-D", "-e"]
     networks:
       - openclaw-internal
 
@@ -65,6 +66,7 @@ services:
       OPENCLAW_LOG_LEVEL: ${OPENCLAW_LOG_LEVEL:-debug}
       PI_CODING_AGENT_DIR: ${PI_CODING_AGENT_DIR:-}
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      AGENT_WORKSPACE_ROOT: ${AGENT_WORKSPACE_ROOT:-}
       BUNDLED_PLUGINS_TO_INSTALL: ${BUNDLED_PLUGINS_TO_INSTALL:-}
       TZ: ${OPENCLAW_TZ:-UTC}
     volumes:
@@ -90,6 +92,7 @@ services:
       coder-copilot:
         condition: service_started
     entrypoint: ["/usr/local/bin/start-gateway.sh"]
+    command: ["node", "openclaw.mjs", "gateway", "--allow-unconfigured"]
     networks:
       - local-llm-service
       - openclaw-internal
