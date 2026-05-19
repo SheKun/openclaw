@@ -86,7 +86,8 @@ services:
       - ${OPENCLAW_CONFIG_DIR}/.ssh:/home/node/.ssh
       - ${OPENCLAW_CONFIG_DIR}/.gitconfig:/home/node/.gitconfig
       - ./start-gateway.sh:/usr/local/bin/start-gateway.sh:ro
-      - ./coder_acp_cmd.sh:/usr/local/bin/coder_acp_cmd.sh:ro
+      - ./coder_copilot_cmd.sh:/usr/local/bin/coder_copilot_cmd.sh:ro
+      - ./coder_kimi_cmd.sh:/usr/local/bin/coder_kimi_cmd.sh:ro
       - ./keepassxc-vault.sh:/usr/local/bin/keepassxc-vault.sh:ro
       - ./secrets/openclaw-secrets.kdbx:/run/openclaw-secrets/openclaw-secrets.kdbx:ro
       - ./secrets/openclaw-secrets.pass:/run/openclaw-secrets/openclaw-secrets.pass:ro

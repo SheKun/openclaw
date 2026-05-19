@@ -104,7 +104,10 @@
         "config": {
           "agents": {
             "copilot": {
-              "command": "/usr/local/bin/coder_acp_cmd.sh"
+              "command": "/usr/local/bin/coder_copilot_cmd.sh"
+            },
+            "kimi": {
+              "command": "/usr/local/bin/coder_kimi_cmd.sh"
             }
           }
         }
@@ -246,7 +249,7 @@
     },
     "backend": "acpx",
     "defaultAgent": "copilot",
-    "allowedAgents": ["copilot"],
+    "allowedAgents": ["copilot", "kimi"],
     "maxConcurrentSessions": 8,
     "stream": {
       "coalesceIdleMs": 300,
@@ -386,7 +389,7 @@
         "runtime": {
           "type": "acp",
           "acp": {
-            "agent": "copilot",
+            "agent": "kimi",
             "backend": "acpx",
             "mode": "persistent",
             "cwd": "/output/projects"

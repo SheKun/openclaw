@@ -270,7 +270,8 @@ EOF
   scp "${SCRIPT_DIR}/create_ssh_user.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/create_ssh_user.sh"
   scp "${SCRIPT_DIR}/keepassxc-vault.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/keepassxc-vault.sh"
   scp "${SCRIPT_DIR}/launch_chrome.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/launch_chrome.sh"
-  scp "${SCRIPT_DIR}/coder_acp_cmd.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/coder_acp_cmd.sh"
+  scp "${SCRIPT_DIR}/coder_copilot_cmd.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/coder_copilot_cmd.sh"
+  scp "${SCRIPT_DIR}/coder_kimi_cmd.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/coder_kimi_cmd.sh"
   ssh "${REMOTE_HOST}" "chmod 700 ${DEPLOY_DIR}/*.sh"
 }
 

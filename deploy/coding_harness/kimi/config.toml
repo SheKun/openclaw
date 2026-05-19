@@ -15,16 +15,10 @@ model = "kimi-k2.6"
 max_context_size = 262144
 capabilities = ["thinking", "image_in"]
 
-[models.qwen3_6-plus]
-provider = "bailian"
-model = "quwen3.6-plus"
-max_context_size = 1048576
-capabilities = ["thinking", "image_in"]
-
 [providers.bailian]
-type = "openai_legacy"
+type = "kimi"
 base_url = "http://litellm-gateway:8081/v1"
-api_key = "sk-Xu-P0vO8WhkNxbHJT3jkNA"
+api_key = "<DUMMY>"
 
 [loop_control]
 max_steps_per_turn = 500

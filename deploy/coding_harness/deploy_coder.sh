@@ -155,16 +155,16 @@ deploy_coder_secret_bundle() {
 deploy_coder_secret_bundle "copilot" "copilot/gh_token" "${COPILOT_GITHUB_TOKEN}"
 deploy_coder_secret_bundle "kimi" "kimi/api_key" "${KIMI_API_KEY}"
 
-echo "=> 创建 copilot 配置目录 ${CODER_COPILOT_CONFIG_DIR} ..."
+echo "=> 部署 copilot 配置目录 ${CODER_COPILOT_CONFIG_DIR} ..."
 ssh "${REMOTE_HOST}" "mkdir -p ${CODER_COPILOT_CONFIG_DIR}"
 if [ -d "${SCRIPT_DIR}/copilot" ] && [ "$(ls -A ${SCRIPT_DIR}/copilot 2>/dev/null)" ]; then
-  scp "${SCRIPT_DIR}"/copilot/* "${REMOTE_HOST}:${CODER_COPILOT_CONFIG_DIR}/"
+  tar -czf - -C "${SCRIPT_DIR}/copilot" . | ssh "${REMOTE_HOST}" "tar -xzf - -C ${CODER_COPILOT_CONFIG_DIR}"
 fi
 
-echo "=> 创建 kimi 配置目录 ${CODER_KIMI_CONFIG_DIR} ..."
+echo "=> 部署 kimi 配置目录 ${CODER_KIMI_CONFIG_DIR} ..."
 ssh "${REMOTE_HOST}" "mkdir -p ${CODER_KIMI_CONFIG_DIR}"
 if [ -d "${SCRIPT_DIR}/kimi" ] && [ "$(ls -A ${SCRIPT_DIR}/kimi 2>/dev/null)" ]; then
-  scp "${SCRIPT_DIR}"/kimi/* "${REMOTE_HOST}:${CODER_KIMI_CONFIG_DIR}/"
+  tar -czf - -C "${SCRIPT_DIR}/kimi" . | ssh "${REMOTE_HOST}" "tar -xzf - -C ${CODER_KIMI_CONFIG_DIR}"
 fi
 
 echo "=> Coder Harness 部署完成。"
