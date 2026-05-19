@@ -1,29 +1,31 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
-echo "🚀 Starting SSH server for Coding Harness Gateway..."
+# If not running as root, re-run with sudo
+if [ "$(id -u)" -ne 0 ]; then
+    exec sudo "$0" "$@"
+fi
 
+# Generate allowlist.json for safe-exec wrapper in coder-copilot
+mkdir -p /root/.vault
+cat << 'EOF' > /root/.vault/allowlist.json
+{
+  "/usr/local/bin/copilot": {
+    "env": "GH_TOKEN",
+    "slot": "copilot/gh_token"
+  }
+}
+EOF
+chmod 700 /root/.vault
+chmod 600 /root/.vault/allowlist.json
 
-# Configure SSH public key for cli_usr (safe-exec unprivileged user)
+# Run safe-exec entry.sh
+sh /safexec_entry.sh
+
+# Create cli_usr user and configure SSH public key for SSH-transported ACP
 /create_ssh_user.sh \
     --server-user cli_usr \
-    --public-key "${OPENCLAW_PUB_KEY:-}"
-
-
-# Prepare the env file for safe-exec
-if [ -f "${KEEPASSXC_DB}" ] && [ -f "${KEEPASSXC_KEY_FILE}" ]; then
-    KEEPASSXC_KEY_VALUE=$(cat "${KEEPASSXC_KEY_FILE}")
-    cat << EOF > /root/.safe-exec/env
-KEEPASSXC_DB='${KEEPASSXC_DB}'
-KEEPASSXC_KEY='${KEEPASSXC_KEY_VALUE}'
-TOKEN_SLOT_PATH='${TOKEN_SLOT_PATH}'
-TOKEN_ENV_VARS='GH_TOKEN'
-ALLOWED_CLIS='/usr/local/bin/copilot'
-EOF
-    chmod 700 /root/.safe-exec/env
-    echo "✅ safe-exec env file configured."
-else
-    echo "⚠️ KeePassXC secrets not found at ${KEEPASSXC_DB}/${KEEPASSXC_KEY_FILE}; copilot token injection will fail."
-fi
+    --home /home/cli_usr \
+    --public-key "${OPENCLAW_PUB_KEY}"
 
 exec "$@"

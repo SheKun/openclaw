@@ -16,9 +16,9 @@ RUN --mount=type=secret,id=openclaw_debian_sources,required=false,target=/run/se
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -eu; \
-    if [ -f /run/secrets/openclaw_debian.sources ]; then \
+    if [ -f /run/secrets/openclaw-debian.sources ]; then \
         rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; \
-        cp /run/secrets/openclaw_debian.sources /etc/apt/sources.list.d/debian.sources; \
+        cp /run/secrets/openclaw-debian.sources /etc/apt/sources.list.d/debian.sources; \
     fi; \
     apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -41,5 +41,12 @@ RUN --mount=type=secret,id=openclaw_npmrc,required=false,target=/run/secrets/ope
         export NPM_CONFIG_USERCONFIG=/run/secrets/openclaw-npmrc; \
     fi; \
     npm install -g "@github/copilot@${COPILOT_VERSION}"
+
+COPY coder_entry.sh /coder_entry.sh
+RUN chmod +x /coder_entry.sh
+
+ENTRYPOINT ["/coder_entry.sh"]
+
+EXPOSE 22
 
 CMD ["/usr/sbin/sshd", "-D", "-e"]

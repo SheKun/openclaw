@@ -8,20 +8,14 @@ services:
     user: "root"
     environment:
       OPENCLAW_PUB_KEY: ${OPENCLAW_PUB_KEY:-}
-      KEEPASSXC_DB: "/root/.safe-exec/openclaw-secrets.kdbx"
-      KEEPASSXC_KEY_FILE: "/root/.safe-exec/openclaw-secrets.pass"
-      TOKEN_SLOT_PATH: "copilot/gh_token"
     volumes:
       - ${CODER_HARNESS_CONFIG_DIR}:/root/.copilot
-      - ./secrets/openclaw-secrets.kdbx:/root/.safe-exec/openclaw-secrets.kdbx:ro
-      - ./secrets/openclaw-secrets.pass:/root/.safe-exec/openclaw-secrets.pass:ro
+      - ./secrets/copilot-secrets.kdbx:/root/.vault/vault.kdbx:ro
+      - ./secrets/copilot-secrets.pass:/root/.vault/key.pass:ro
       - ./output/projects:/output/projects
-      - ./coder_entry.sh:/entrypoint.sh:ro
       - ./create_ssh_user.sh:/create_ssh_user.sh:ro
     init: true
     restart: unless-stopped
-    entrypoint: ["/entrypoint.sh"]
-    command: ["/usr/sbin/sshd", "-D", "-e"]
     networks:
       - openclaw-internal
 

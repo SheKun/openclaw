@@ -26,14 +26,6 @@ while [ "$#" -gt 0 ]; do
 			DEPLOY_DIR="$2"
 			shift 2
 			;;
-		--coder-harness-config-dir)
-			CODER_HARNESS_CONFIG_DIR="$2"
-			shift 2
-			;;
-		--coder-copilot-image)
-			CODER_COPILOT_IMAGE="$2"
-			shift 2
-			;;
 		*)
 			echo "错误: 未知参数 $1"
 			exit 1
@@ -41,8 +33,8 @@ while [ "$#" -gt 0 ]; do
 	esac
 done
 
-if [ -z "${REMOTE_HOST}" ] || [ -z "${DEPLOY_DIR}" ] || [ -z "${CODER_HARNESS_CONFIG_DIR}" ] || [ -z "${CODER_COPILOT_IMAGE}" ]; then
-	echo "用法: deploy_copilot.sh --remote-host <host> --deploy-dir <dir> --coder-harness-config-dir <dir> --coder-copilot-image <image>"
+if [ -z "${REMOTE_HOST}" ] || [ -z "${DEPLOY_DIR}" ]; then
+	echo "用法: deploy_copilot.sh --remote-host <host> --deploy-dir <dir>"
 	exit 1
 fi
 
@@ -52,6 +44,24 @@ for required_file in "${DOCKER_APT_SOURCES_FILE}" "${DOCKER_NPMRC_FILE}"; do
 		exit 1
 	fi
 done
+
+# 加载通用部署工具
+source "${DOCKER_BUILDKIT_CONFIG_DIR}/deploy_tool.sh"
+
+echo "=> 加载环境变量..."
+GLOBAL_ENV_FILE="${DEPLOY_SCRIPT_DIR}/../.env"
+LOCAL_ENV_FILE="${DEPLOY_SCRIPT_DIR}/.env"
+
+load_env_file_if_exists "${GLOBAL_ENV_FILE}"
+load_env_file_if_exists "${LOCAL_ENV_FILE}"
+
+LOCAL_COPILOT_BUNDLE_DIR=""
+cleanup_copilot_secret_bundle() {
+  if [ -n "${LOCAL_COPILOT_BUNDLE_DIR:-}" ] && [ -d "${LOCAL_COPILOT_BUNDLE_DIR}" ]; then
+    rm -rf "${LOCAL_COPILOT_BUNDLE_DIR}"
+  fi
+}
+trap cleanup_copilot_secret_bundle EXIT
 
 DOCKER_BUILD_SECRET_ARGS=(
 	--secret "id=openclaw_debian_sources,src=${DOCKER_APT_SOURCES_FILE}"
@@ -70,6 +80,9 @@ if [ -z "${COPILOT_VERSION}" ]; then
 		exit 1
 	fi
 fi
+
+CODER_HARNESS_CONFIG_DIR="${CODER_HARNESS_CONFIG_DIR:-~/.coder-harness}"
+CODER_COPILOT_IMAGE="${CODER_COPILOT_IMAGE:-krepus.com/coder-copilot:${COPILOT_VERSION}}"
 
 echo "=> 使用 Copilot CLI 版本: ${COPILOT_VERSION}"
 echo "=> 将构建并部署 Harness 镜像: ${CODER_COPILOT_IMAGE}"
@@ -98,10 +111,30 @@ else
 	docker save "${CODER_COPILOT_IMAGE}" | ssh "${REMOTE_HOST}" "podman load"
 fi
 
-echo "=> 复制 Copilot Harness 部署文件到远程服务器 ..."
-scp "${SCRIPT_DIR}/coder_entry.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/coder_entry.sh"
-scp "${SCRIPT_DIR}/coder_acp_cmd.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/coder_acp_cmd.sh"
-ssh "${REMOTE_HOST}" "chmod 700 ${DEPLOY_DIR}/coder_entry.sh ${DEPLOY_DIR}/coder_acp_cmd.sh"
+# 准备并部署 Copilot 专属的 KeePassXC 密钥库
+require_cmd keepassxc-cli
+[ -n "${COPILOT_GITHUB_TOKEN:-}" ] || fail "COPILOT_GITHUB_TOKEN 环境变量未设置"
+[ -n "${AGENT_SECRET_DB_PASSWORD:-}" ] || fail "AGENT_SECRET_DB_PASSWORD 环境变量未设置"
+
+echo "=> 在本机打包 Copilot Keepass 密钥库 ..."
+LOCAL_COPILOT_BUNDLE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/copilot-secret-bundle.XXXXXX")"
+LOCAL_COPILOT_BUNDLE_DB_PATH="${LOCAL_COPILOT_BUNDLE_DIR}/copilot-secrets.kdbx"
+LOCAL_COPILOT_BUNDLE_PASS_PATH="${LOCAL_COPILOT_BUNDLE_DIR}/copilot-secrets.pass"
+
+printf '%s\n%s\n' "${AGENT_SECRET_DB_PASSWORD}" "${AGENT_SECRET_DB_PASSWORD}" | \
+  keepassxc-cli db-create -q -p "${LOCAL_COPILOT_BUNDLE_DB_PATH}" >/dev/null 2>&1
+
+upsert_keepass_secret "${LOCAL_COPILOT_BUNDLE_DB_PATH}" "${AGENT_SECRET_DB_PASSWORD}" "copilot/gh_token" "${COPILOT_GITHUB_TOKEN}"
+
+printf '%s' "${AGENT_SECRET_DB_PASSWORD}" > "${LOCAL_COPILOT_BUNDLE_PASS_PATH}"
+chmod 600 "${LOCAL_COPILOT_BUNDLE_DB_PATH}" "${LOCAL_COPILOT_BUNDLE_PASS_PATH}"
+
+echo "=> 复制 Copilot Keepass 密钥库到远程服务器 ..."
+REMOTE_SECRETS_DIR="${DEPLOY_DIR}/secrets"
+ssh "${REMOTE_HOST}" "mkdir -p ${REMOTE_SECRETS_DIR}"
+scp "${LOCAL_COPILOT_BUNDLE_DB_PATH}" "${REMOTE_HOST}:${REMOTE_SECRETS_DIR}/copilot-secrets.kdbx"
+scp "${LOCAL_COPILOT_BUNDLE_PASS_PATH}" "${REMOTE_HOST}:${REMOTE_SECRETS_DIR}/copilot-secrets.pass"
+ssh "${REMOTE_HOST}" "chmod 600 ${REMOTE_SECRETS_DIR}/copilot-secrets.kdbx ${REMOTE_SECRETS_DIR}/copilot-secrets.pass"
 
 echo "=> 创建 coder harness 配置目录 ${CODER_HARNESS_CONFIG_DIR} ..."
 ssh "${REMOTE_HOST}" "

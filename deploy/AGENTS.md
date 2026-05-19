@@ -124,6 +124,7 @@ deploy/
 ├── deploy_openclaw.sh          # 本地构建 + SSH 远程部署主脚本
 ├── create_ssh_user.sh          # SSH 用户初始化工具（创建 cdp_tunnel、coder-copilot 等系统用户）
 ├── launch_chrome.sh            # 宿主机 Chrome CDP 启动脚本（部署后手动运行）
+├── coder_acp_cmd.sh            # 配套 ACP 远程调用命令脚本（供 ACP client 使用）
 ├── buildkit/                   # BuildKit secret 配置（镜像源）
 │   ├── debian.sources
 │   └── npmrc
@@ -132,7 +133,6 @@ deploy/
 │       ├── Dockerfile
 │       ├── deploy_copilot.sh   # Copilot Harness 独立部署脚本（被主部署脚本调用）
 │       ├── coder_entry.sh      # Harness 容器入口脚本
-│       ├── coder_acp_cmd.sh    # 配套 ACP 远程调用命令脚本（供 ACP client 使用）
 │       └── sshd_config         # 安全加固的 SSH 服务配置
 └── myextensions/
     └── guidance/               # 自定义全局规则注入插件

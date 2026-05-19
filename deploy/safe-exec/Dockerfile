@@ -19,23 +19,10 @@ RUN npm install -g tsx
 
 # Set working directory
 WORKDIR /opt/safe-exec
-
-# Copy cli-wrapper.ts, owned by root, unreadable by anyone else
 COPY --chown=root:root cli-wrapper.ts .
-
-# Create a wrapper script that loads secrets from a root-only env file,
-# then executes cli-wrapper.ts. cli_usr cannot read this script.
-RUN cat <<'EOF' > /opt/safe-exec/run-cli.sh
-#!/bin/bash
-set -e
-if [ -r /root/.safe-exec/env ]; then
-    set -a
-    source /root/.safe-exec/env
-    set +a
-fi
-exec /usr/local/bin/tsx /opt/safe-exec/cli-wrapper.ts "$@"
-EOF
-RUN chmod -R 700 /opt/safe-exec && chown -R root:root /opt/safe-exec
+COPY --chown=root:root extract-tokens.ts .
+COPY --chown=root:root run-cli.sh .
+RUN chmod -R 700 /opt/safe-exec
 
 # Create cli_usr user (no password, cannot log in)
 RUN useradd -m -s /bin/bash cli_usr
@@ -43,8 +30,27 @@ RUN useradd -m -s /bin/bash cli_usr
 # Configure sudoers:
 # - cli_usr needs no TTY (Docker default has none without -t)
 # - cli_usr can run only the wrapper, and only with arguments
-RUN printf "Defaults:cli_usr !requiretty\ncli_usr ALL=(ALL) NOPASSWD: /opt/safe-exec/run-cli.sh *\n" > /etc/sudoers.d/cli-wrapper \
+RUN printf "Defaults:cli_usr !requiretty\ncli_usr ALL=(ALL) NOPASSWD: /opt/safe-exec/run-cli.sh *, /opt/safe-exec/entry.sh *\n" > /etc/sudoers.d/cli-wrapper \
     && chmod 440 /etc/sudoers.d/cli-wrapper
+
+COPY safexec_entry.sh /safexec_entry.sh
+RUN chmod +x /safexec_entry.sh
+
+ENTRYPOINT ["/safexec_entry.sh"]
+
+
+# volume to mount the vault
+# the following files are supposed to be mounted here:
+# - vault.kdbx: the keepassxc vault file
+# - key.pass: the master key for the vault
+# - allowlist.json: the command allowlist
+# e.g.
+# {
+#     "/bin/copilot": {"env": "GH_TOKEN", "slot": "copilot/gh_token"},
+#     "/usr/local/bin/aws": {"env": "AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY", "slot": "aws/access_key_id"}
+#     "*": {}
+# }
+VOLUME ["/root/.vault"]
 
 # Switch to cli_usr by default
 USER cli_usr

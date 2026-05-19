@@ -107,46 +107,14 @@ OPENCLAW_PUB_KEY=""
 OPENCLAW_GATEWAY_TLS_FINGERPRINT=""
 CODER_COPILOT_IMAGE=""
 
-step() {
-  local idx="$1"
-  local text="$2"
-  echo ""
-  echo "[${idx}/6] ${text}"
-}
 
-substep() {
-  echo "  -> $1"
-}
-
-fail() {
-  echo "错误: $1" >&2
-  exit 1
-}
+# 加载通用部署工具
+source "${DOCKER_BUILDKIT_CONFIG_DIR}/deploy_tool.sh"
 
 cleanup_secret_bundle() {
   if [ -n "${LOCAL_SECRET_BUNDLE_DIR:-}" ] && [ -d "${LOCAL_SECRET_BUNDLE_DIR}" ]; then
     rm -rf "${LOCAL_SECRET_BUNDLE_DIR}"
   fi
-}
-
-load_env_file_if_exists() {
-  local env_file="$1"
-  if [ -f "${env_file}" ]; then
-    substep "加载环境变量: ${env_file}"
-    set -a
-    source <(sed 's/\r//' "${env_file}")
-    set +a
-  fi
-}
-
-require_file() {
-  local file_path="$1"
-  [ -f "${file_path}" ] || fail "未找到文件 (${file_path})"
-}
-
-require_cmd() {
-  local cmd="$1"
-  command -v "${cmd}" >/dev/null 2>&1 || fail "缺少命令 ${cmd}"
 }
 
 assert_required_env_vars() {
@@ -163,20 +131,6 @@ assert_required_env_vars() {
   fi
 }
 
-upsert_keepass_secret() {
-  local entry_path="$1"
-  local secret_value="$2"
-  local group_path="${entry_path%/*}"
-
-  if [ "${group_path}" != "${entry_path}" ]; then
-    echo "${AGENT_SECRET_DB_PASSWORD}" |
-      keepassxc-cli mkdir -q "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${group_path}" >/dev/null 2>&1 || true
-  fi
-
-  printf '%s\n%s\n%s\n' "${AGENT_SECRET_DB_PASSWORD}" "${secret_value}" "${secret_value}" |
-    keepassxc-cli add -q -u "openclaw" -p "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${entry_path}" >/dev/null 2>&1
-}
-
 build_keepass_secret_bundle() {
   substep "在本机打包 Keepass 密钥库"
   LOCAL_SECRET_BUNDLE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/openclaw-secret-bundle.XXXXXX")"
@@ -186,13 +140,12 @@ build_keepass_secret_bundle() {
   printf '%s\n%s\n' "${AGENT_SECRET_DB_PASSWORD}" "${AGENT_SECRET_DB_PASSWORD}" |
     keepassxc-cli db-create -q -p "${LOCAL_SECRET_BUNDLE_DB_PATH}" >/dev/null 2>&1
 
-  upsert_keepass_secret "feishu/stewardAppSecret" "${FEISHU_APP_SECRET_STEWARD}"
-  upsert_keepass_secret "feishu/coderAppSecret" "${FEISHU_APP_SECRET_CODER}"
-  upsert_keepass_secret "feishu/plannerAppSecret" "${FEISHU_APP_SECRET_PLANNER}"
-  upsert_keepass_secret "litellm/apiKey" "${LITELLM_API_KEY}"
-  upsert_keepass_secret "perplexity/apiKey" "${PERPLEXITY_API_KEY:-}"
-  upsert_keepass_secret "agent/secretDbPassword" "${AGENT_SECRET_DB_PASSWORD}"
-  upsert_keepass_secret "copilot/gh_token" "${COPILOT_GITHUB_TOKEN:-}"
+  upsert_keepass_secret "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${AGENT_SECRET_DB_PASSWORD}" "feishu/stewardAppSecret" "${FEISHU_APP_SECRET_STEWARD}"
+  upsert_keepass_secret "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${AGENT_SECRET_DB_PASSWORD}" "feishu/coderAppSecret" "${FEISHU_APP_SECRET_CODER}"
+  upsert_keepass_secret "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${AGENT_SECRET_DB_PASSWORD}" "feishu/plannerAppSecret" "${FEISHU_APP_SECRET_PLANNER}"
+  upsert_keepass_secret "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${AGENT_SECRET_DB_PASSWORD}" "litellm/apiKey" "${LITELLM_API_KEY}"
+  upsert_keepass_secret "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${AGENT_SECRET_DB_PASSWORD}" "perplexity/apiKey" "${PERPLEXITY_API_KEY:-}"
+  upsert_keepass_secret "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${AGENT_SECRET_DB_PASSWORD}" "agent/secretDbPassword" "${AGENT_SECRET_DB_PASSWORD}"
 
   printf '%s' "${AGENT_SECRET_DB_PASSWORD}" > "${LOCAL_SECRET_BUNDLE_PASS_PATH}"
   chmod 600 "${LOCAL_SECRET_BUNDLE_DB_PATH}" "${LOCAL_SECRET_BUNDLE_PASS_PATH}"
@@ -316,6 +269,7 @@ EOF
   scp "${SCRIPT_DIR}/create_ssh_user.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/create_ssh_user.sh"
   scp "${SCRIPT_DIR}/keepassxc-vault.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/keepassxc-vault.sh"
   scp "${SCRIPT_DIR}/launch_chrome.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/launch_chrome.sh"
+  scp "${SCRIPT_DIR}/coder_acp_cmd.sh" "${REMOTE_HOST}:${DEPLOY_DIR}/coder_acp_cmd.sh"
   ssh "${REMOTE_HOST}" "chmod 700 ${DEPLOY_DIR}/*.sh"
 }
 
@@ -460,9 +414,7 @@ deploy_coder_harness() {
   substep "执行 Coder Harness 部署脚本"
   "${COPILOT_DEPLOY_SCRIPT}" \
     --remote-host "${REMOTE_HOST}" \
-    --deploy-dir "${DEPLOY_DIR}" \
-    --coder-harness-config-dir "${CODER_HARNESS_CONFIG_DIR}" \
-    --coder-copilot-image "${CODER_COPILOT_IMAGE}"
+    --deploy-dir "${DEPLOY_DIR}"
 }
 
 copy_orchestration_files() {
