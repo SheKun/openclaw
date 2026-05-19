@@ -1,0 +1,10 @@
+{
+  "/usr/local/bin/copilot": {
+    "env": "GH_TOKEN",
+    "slot": "copilot/gh_token"
+  },
+  "/root/.local/bin/kimi": {
+    "env": "KIMI_API_KEY",
+    "slot": "kimi/api_key"
+  }
+}

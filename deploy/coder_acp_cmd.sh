@@ -4,6 +4,6 @@
 # run-cli.sh (running as root via sudo) sources the env file, loads
 # the KeePassXC database, retrieves GH_TOKEN, and injects it into the
 # copilot process environment.
-exec ssh -Tq -o StrictHostKeyChecking=no coder-copilot \
+exec ssh -Tq -o StrictHostKeyChecking=no coder-kimi \
      'sudo /opt/safe-exec/run-cli.sh \
-     /usr/local/bin/copilot --acp --stdio --allow-all-tools --allow-all-paths --allow-all-urls' "$@"
+     /root/.local/bin/kimi acp' "$@"

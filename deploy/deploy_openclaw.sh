@@ -11,12 +11,11 @@ DOCKER_APT_SOURCES_FILE="${DOCKER_BUILDKIT_CONFIG_DIR}/debian.sources"
 DOCKER_NPMRC_FILE="${DOCKER_BUILDKIT_CONFIG_DIR}/npmrc"
 GLOBAL_ENV_FILE="${PROJECT_ROOT}/../.env"
 LOCAL_ENV_FILE="${SCRIPT_DIR}/.env"
-COPILOT_HARNESS_DIR="${SCRIPT_DIR}/coding_harness/copilot"
-COPILOT_DEPLOY_SCRIPT="${COPILOT_HARNESS_DIR}/deploy_copilot.sh"
+CODER_HARNESS_DIR="${SCRIPT_DIR}/coding_harness"
+CODER_DEPLOY_SCRIPT="${CODER_HARNESS_DIR}/deploy_coder.sh"
 
 # ------- 版本控制量设置（可按需调整） -------
 OPENCLAW_BUILD_SUFFIX="${OPENCLAW_BUILD_SUFFIX:-build202605181537}"
-COPILOT_VERSION="${COPILOT_VERSION:-1.0.38}"
 DOCKER_BUILD_SECRET_ARGS=(
   --secret "id=openclaw_debian_sources,src=${DOCKER_APT_SOURCES_FILE}"
   --secret "id=openclaw_npmrc,src=${DOCKER_NPMRC_FILE}"
@@ -89,7 +88,8 @@ OPENCLAW_TZ="${OPENCLAW_TZ:-UTC}"
 EXEC_NODE_CONFIG_DIR="~/.exec_node"
 
 # Coder Harness
-CODER_HARNESS_CONFIG_DIR="~/.coder-harness"
+CODER_COPILOT_CONFIG_DIR="~/.copilot"
+CODER_KIMI_CONFIG_DIR="~/.kimi"
 
 # ------- 脚本执行变量 -------
 
@@ -105,7 +105,9 @@ DEFAULT_AGENT_DIR=""
 GATEWAY_TOKEN=""
 OPENCLAW_PUB_KEY=""
 OPENCLAW_GATEWAY_TLS_FINGERPRINT=""
-CODER_COPILOT_IMAGE=""
+COPILOT_VERSION=""
+KIMI_VERSION=""
+CODER_IMAGE=""
 
 
 # 加载通用部署工具
@@ -157,7 +159,6 @@ resolve_openclaw_identity() {
 
   VERSION="${OPENCLAW_VERSION}-${OPENCLAW_BUILD_SUFFIX}"
   IMAGE_NAME="krepus.com/openclaw:${VERSION}"
-  CODER_COPILOT_IMAGE="krepus.com/coder-copilot:${COPILOT_VERSION}"
 
   DEFAULT_AGENT_ID=$(node -e '
 const fs = require("node:fs");
@@ -293,6 +294,11 @@ Host coder-copilot
   ControlMaster auto
   ControlPath ~/.ssh/sockets/%r@%h:%p
   ControlPersist yes
+Host coder-kimi
+  User cli_usr
+  ControlMaster auto
+  ControlPath ~/.ssh/sockets/%r@%h:%p
+  ControlPersist yes
 Host cdp_tunnel
   HostName 172.17.0.1
   User cdp_tunnel
@@ -383,9 +389,10 @@ OPENCLAW_LOG_LEVEL='${OPENCLAW_LOG_LEVEL}'
 AGENT_WORKSPACE_ROOT='${AGENT_WORKSPACE_ROOT}'
 BUNDLED_PLUGINS_TO_INSTALL='${BUNDLED_PLUGINS_TO_INSTALL[*]:-}'
 
-# Coder Harness 配置
-CODER_HARNESS_CONFIG_DIR='${CODER_HARNESS_CONFIG_DIR}'
-CODER_COPILOT_IMAGE='${CODER_COPILOT_IMAGE}'
+# Coder copilot 配置
+CODER_COPILOT_CONFIG_DIR='${CODER_COPILOT_CONFIG_DIR}'
+CODER_KIMI_CONFIG_DIR='${CODER_KIMI_CONFIG_DIR}'
+CODER_IMAGE='${CODER_IMAGE}'
 OPENCLAW_PUB_KEY='${OPENCLAW_PUB_KEY}'
 
 # Exec Node 配置
@@ -408,13 +415,23 @@ deploy_openclaw_to_server() {
 }
 
 deploy_coder_harness() {
-  require_file "${COPILOT_DEPLOY_SCRIPT}"
-  [ -x "${COPILOT_DEPLOY_SCRIPT}" ] || fail "Copilot 部署脚本不可执行 (${COPILOT_DEPLOY_SCRIPT})"
+  require_file "${CODER_DEPLOY_SCRIPT}"
+  [ -x "${CODER_DEPLOY_SCRIPT}" ] || fail "Copilot 部署脚本不可执行 (${CODER_DEPLOY_SCRIPT})"
+
+  substep "解析 Coder 版本号"
+  COPILOT_VERSION="${COPILOT_VERSION:-1.0.44}"
+  KIMI_VERSION="${KIMI_VERSION:-1.44.0}"
+  CODER_IMAGE="${CODER_IMAGE:-krepus.com/coder-cli:copilot${COPILOT_VERSION}-kimi${KIMI_VERSION}}"
+  
+  substep "Copilot: ${COPILOT_VERSION}, Kimi: ${KIMI_VERSION}"
 
   substep "执行 Coder Harness 部署脚本"
-  "${COPILOT_DEPLOY_SCRIPT}" \
+  "${CODER_DEPLOY_SCRIPT}" \
     --remote-host "${REMOTE_HOST}" \
-    --deploy-dir "${DEPLOY_DIR}"
+    --deploy-dir "${DEPLOY_DIR}" \
+    --copilot-version "${COPILOT_VERSION}" \
+    --kimi-version "${KIMI_VERSION}" \
+    --coder-image "${CODER_IMAGE}"
 }
 
 copy_orchestration_files() {

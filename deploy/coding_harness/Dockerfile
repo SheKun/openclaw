@@ -9,8 +9,6 @@ FROM safe-exec:latest
 
 USER root
 
-ARG COPILOT_VERSION=latest
-
 # Install OpenSSH server for SSH-transported ACP execution from gateway.
 RUN --mount=type=secret,id=openclaw_debian_sources,required=false,target=/run/secrets/openclaw-debian.sources \
     --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -22,8 +20,7 @@ RUN --mount=type=secret,id=openclaw_debian_sources,required=false,target=/run/se
     fi; \
     apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        openssh-server \
-        ca-certificates \
+        openssh-server ca-certificates curl \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -33,7 +30,9 @@ RUN mkdir -p /run/sshd \
     && chmod 0755 /run/sshd \
     && ssh-keygen -A
 
+
 # Install GitHub Copilot CLI
+ARG COPILOT_VERSION=latest
 RUN --mount=type=secret,id=openclaw_npmrc,required=false,target=/run/secrets/openclaw-npmrc \
     --mount=type=cache,target=/root/.npm \
     set -eu; \
@@ -42,8 +41,16 @@ RUN --mount=type=secret,id=openclaw_npmrc,required=false,target=/run/secrets/ope
     fi; \
     npm install -g "@github/copilot@${COPILOT_VERSION}"
 
+# Install Kimi CLI
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && /root/.local/bin/uv tool install --python 3.13 kimi-cli
+
 COPY coder_entry.sh /coder_entry.sh
 RUN chmod +x /coder_entry.sh
+
+RUN mkdir -p /root/.vault 
+COPY ./allowlist.json /root/.vault/allowlist.json
+RUN chmod 600 /root/.vault/allowlist.json
 
 ENTRYPOINT ["/coder_entry.sh"]
 
