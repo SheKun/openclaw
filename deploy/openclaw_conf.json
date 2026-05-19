@@ -10,7 +10,14 @@
       "browser": {
         "mode": "off"
       },
-      "allowCommands": [],
+      "allowCommands": [
+        "camera.list",
+        "camera.snap",
+        "camera.clip",
+        "screen.snapshot",
+        "screen.record",
+        "notification.list"
+      ],
       "denyCommands": []
     },
     "auth": {
@@ -355,13 +362,7 @@
         "tools": {
           "profile": "full",
           "alsoAllow": ["lobster", "llm-task"],
-          "deny": [
-            "group:memory-wiki",
-            "canvas",
-            "image_generate",
-            "music_generate",
-            "video_generate"
-          ]
+          "deny": ["memory-wiki", "canvas", "image_generate", "music_generate", "video_generate"]
         },
         "skills": [
           "clawhub",
@@ -374,7 +375,8 @@
           "session-logs",
           "weather",
           "obsidian",
-          "wiki-create"
+          "wiki-create",
+          "anysearch"
         ]
       },
       {
@@ -387,7 +389,7 @@
             "agent": "copilot",
             "backend": "acpx",
             "mode": "persistent",
-            "cwd": "/projects"
+            "cwd": "/output/projects"
           }
         }
       },
@@ -419,7 +421,7 @@
           "profile": "minimal",
           "alsoAllow": ["group:fs", "group:web", "browser", "exec"]
         },
-        "skills": ["browser-automation", "wiki-create", "ctrip-travel-search"]
+        "skills": ["browser-automation", "wiki-create", "ctrip-travel-search", "anysearch"]
       }
     ]
   },

@@ -15,7 +15,7 @@ services:
       - ${CODER_HARNESS_CONFIG_DIR}:/root/.copilot
       - ./secrets/openclaw-secrets.kdbx:/root/.safe-exec/openclaw-secrets.kdbx:ro
       - ./secrets/openclaw-secrets.pass:/root/.safe-exec/openclaw-secrets.pass:ro
-      - ./output/projects:/projects
+      - ./output/projects:/output/projects
       - ./coder_entry.sh:/entrypoint.sh:ro
       - ./create_ssh_user.sh:/create_ssh_user.sh:ro
     init: true
@@ -79,7 +79,7 @@ services:
       - ./secrets/openclaw-secrets.kdbx:/run/openclaw-secrets/openclaw-secrets.kdbx:ro
       - ./secrets/openclaw-secrets.pass:/run/openclaw-secrets/openclaw-secrets.pass:ro
       - ./myextensions:/home/node/.openclaw/extensions
-      - ./output/projects:/projects
+      - ./output:/output
       - ./workspaces:/workspaces
       - apt_archives:/var/cache/apt/archives/
       - npm_archives:/home/node/.npm
